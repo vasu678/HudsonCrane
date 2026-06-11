@@ -1,0 +1,55 @@
+import io
+import uuid
+
+import httpx
+from google.cloud import storage
+from PIL import Image
+from rembg import remove
+
+MAX_DIMENSION = 1500
+
+
+def _download(url: str) -> bytes:
+    r = httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True, timeout=30)
+    r.raise_for_status()
+    return r.content
+
+
+def _downscale_png(data: bytes) -> bytes:
+    img = Image.open(io.BytesIO(data))
+    if max(img.size) > MAX_DIMENSION:
+        img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _downscale_jpeg(data: bytes) -> bytes:
+    img = Image.open(io.BytesIO(data))
+    if max(img.size) > MAX_DIMENSION:
+        img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=85)
+    return buf.getvalue()
+
+
+def _upload(data: bytes, bucket_name: str, prefix: str, content_type: str, ext: str) -> str:
+    client = storage.Client()
+    blob = client.bucket(bucket_name).blob(f"{prefix}/{uuid.uuid4().hex}.{ext}")
+    blob.upload_from_string(data, content_type=content_type)
+    return f"https://storage.googleapis.com/{bucket_name}/{blob.name}"
+
+
+async def process_hero(image_url: str, bucket_name: str) -> str:
+    """Download, remove background, upload as PNG. Returns public GCS URL."""
+    raw = _download(image_url)
+    scaled = _downscale_png(raw)
+    transparent = remove(scaled)
+    return _upload(transparent, bucket_name, prefix="hero", content_type="image/png", ext="png")
+
+
+async def process_supporting_image(image_url: str, bucket_name: str) -> str:
+    """Download, downscale, upload as JPEG (no background removal). Returns public GCS URL."""
+    raw = _download(image_url)
+    jpeg = _downscale_jpeg(raw)
+    return _upload(jpeg, bucket_name, prefix="support", content_type="image/jpeg", ext="jpg")
