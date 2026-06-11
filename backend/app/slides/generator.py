@@ -77,41 +77,58 @@ def generate_slide(
     # 2. Build alt-text → objectId map for image slots on the duplicated slide
     image_slots = _build_image_slots(svc, template_presentation_id, new_slide_id)
 
-    # 3. Replace text tokens + swap hero image
+    # 3. Build batchUpdate requests: text tokens + hero + support slots
+    requests: list[dict] = [
+        {
+            "replaceAllText": {
+                "containsText": {"text": "{{title}}", "matchCase": True},
+                "replaceText": product.name,
+                "pageObjectIds": [new_slide_id],
+            }
+        },
+        {
+            "replaceAllText": {
+                "containsText": {"text": "{{dims}}", "matchCase": True},
+                "replaceText": product.dimensions,
+                "pageObjectIds": [new_slide_id],
+            }
+        },
+        {
+            "replaceAllText": {
+                "containsText": {"text": "{{desc}}", "matchCase": True},
+                "replaceText": product.description,
+                "pageObjectIds": [new_slide_id],
+            }
+        },
+        {
+            "replaceImage": {
+                "imageObjectId": image_slots["hero"],
+                "url": product.hero_image_url,
+                "imageReplaceMethod": IMAGE_REPLACE_HERO,
+            }
+        },
+    ]
+
+    # Supporting slots: fill what we have, delete the rest
+    support_urls = product.supporting_image_urls[:2]
+    for i in range(2):
+        slot = image_slots.get(f"support{i + 1}")
+        if slot is None:
+            continue  # template missing this slot — already warned in _build_image_slots
+        if i < len(support_urls):
+            requests.append({
+                "replaceImage": {
+                    "imageObjectId": slot,
+                    "url": support_urls[i],
+                    "imageReplaceMethod": IMAGE_REPLACE_SUPPORT,
+                }
+            })
+        else:
+            requests.append({"deleteObject": {"objectId": slot}})
+
     svc.presentations().batchUpdate(
         presentationId=template_presentation_id,
-        body={
-            "requests": [
-                {
-                    "replaceAllText": {
-                        "containsText": {"text": "{{title}}", "matchCase": True},
-                        "replaceText": product.name,
-                        "pageObjectIds": [new_slide_id],
-                    }
-                },
-                {
-                    "replaceAllText": {
-                        "containsText": {"text": "{{dims}}", "matchCase": True},
-                        "replaceText": product.dimensions,
-                        "pageObjectIds": [new_slide_id],
-                    }
-                },
-                {
-                    "replaceAllText": {
-                        "containsText": {"text": "{{desc}}", "matchCase": True},
-                        "replaceText": product.description,
-                        "pageObjectIds": [new_slide_id],
-                    }
-                },
-                {
-                    "replaceImage": {
-                        "imageObjectId": image_slots["hero"],
-                        "url": product.hero_image_url,
-                        "imageReplaceMethod": IMAGE_REPLACE_HERO,
-                    }
-                },
-            ]
-        },
+        body={"requests": requests},
     ).execute()
 
     return f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
