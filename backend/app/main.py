@@ -1,8 +1,10 @@
 import logging
 import os
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.images.processor import process_hero, process_supporting_image
@@ -41,6 +43,10 @@ class ScrapeResponse(BaseModel):
 
 class GenerateResponse(BaseModel):
     deck_url: str
+
+
+class ProcessHeroResponse(BaseModel):
+    hero_url: str
 
 
 @app.get("/health")
@@ -122,3 +128,35 @@ async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
         raise HTTPException(status_code=500, detail=f"Two-product slide generation failed: {e}")
 
     return GenerateResponse(deck_url=deck_url)
+
+
+@app.post("/api/process-hero", response_model=ProcessHeroResponse)
+async def process_hero_endpoint(req: ScrapeRequest) -> ProcessHeroResponse:
+    """Run rembg on a vendor hero URL and return the GCS URL.
+    Called before the mask editor so the user sees the auto cutout first."""
+    try:
+        hero_url = await process_hero(req.url, GCS_BUCKET)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
+    return ProcessHeroResponse(hero_url=hero_url)
+
+
+@app.get("/api/image-proxy")
+async def image_proxy(url: str) -> Response:
+    """Proxy an image from any URL through the backend.
+    Lets the browser load cross-origin images into a canvas without CORS taint."""
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Only http/https URLs are supported")
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0"},
+                follow_redirects=True,
+                timeout=30,
+            )
+        r.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Image fetch failed: {e}")
+    content_type = r.headers.get("content-type", "image/png")
+    return Response(content=r.content, media_type=content_type)

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import MaskEditor from './components/MaskEditor'
 
 interface ScrapeResult {
   name: string
@@ -112,6 +113,11 @@ export default function App() {
   const [description, setDescription] = useState('')
   const [broken, setBroken] = useState<BrokenSet>(new Set())
 
+  // mask editor (single-product only)
+  const [processingHero, setProcessingHero] = useState(false)
+  const [processedHeroUrl, setProcessedHeroUrl] = useState('')
+  const [editingHero, setEditingHero] = useState(false)
+
   // two-product
   const [urlA, setUrlA] = useState('')
   const [urlB, setUrlB] = useState('')
@@ -147,6 +153,7 @@ export default function App() {
   function setHero(i: number) {
     setSupportingIndices(prev => prev.filter(idx => idx !== i))
     setHeroIndex(i)
+    setProcessedHeroUrl('')  // stale once hero changes
   }
 
   function toggleSupporting(i: number, e: React.MouseEvent) {
@@ -201,6 +208,29 @@ export default function App() {
     }
   }
 
+  // ── mask editor handler ──────────────────────────────────────────────
+  async function handleEditCutout() {
+    const vendorUrl = displayedImages[heroIndex]
+    if (!vendorUrl) return
+    setProcessingHero(true)
+    setError('')
+    try {
+      const res = await fetch('/api/process-hero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: vendorUrl }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Processing failed') }
+      const { hero_url } = await res.json()
+      setProcessedHeroUrl(hero_url)
+      setEditingHero(true)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setProcessingHero(false)
+    }
+  }
+
   // ── two-product handlers ─────────────────────────────────────────────
   async function handleScrapeTwo() {
     setError('')
@@ -247,6 +277,7 @@ export default function App() {
   function handleReset() {
     setStep('input'); setUrl(''); setScraped(null); setDeckUrl(''); setError('')
     setBroken(new Set()); setSupportingIndices([])
+    setProcessedHeroUrl(''); setEditingHero(false); setProcessingHero(false)
     setUrlA(''); setUrlB(''); setScrapedA(null); setScrapedB(null)
     setBrokenA(new Set()); setBrokenB(new Set())
   }
@@ -393,6 +424,26 @@ export default function App() {
                 </p>
               )}
             </div>
+
+            {/* Optional mask editor entry point */}
+            <div className="flex items-center justify-between py-1">
+              <p className="text-xs text-stone-400">
+                Background removal runs on the hero.{' '}
+                {processedHeroUrl ? (
+                  <span className="text-emerald-600 font-medium">Cutout preview ready.</span>
+                ) : (
+                  'Optionally inspect and touch up the cutout before generating.'
+                )}
+              </p>
+              <button
+                onClick={handleEditCutout}
+                disabled={processingHero || step !== 'review'}
+                className="shrink-0 ml-4 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 rounded-lg hover:border-stone-600 hover:text-stone-800 disabled:opacity-40 transition-colors"
+              >
+                {processingHero ? 'Processing…' : processedHeroUrl ? 'Re-edit cutout' : 'Edit cutout'}
+              </button>
+            </div>
+
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-stone-500 mb-1">Product Name</label>
@@ -477,6 +528,19 @@ export default function App() {
         )}
 
       </main>
+
+      {/* Mask editor modal (single-product only) */}
+      {editingHero && processedHeroUrl && (
+        <MaskEditor
+          originalUrl={displayedImages[heroIndex]}
+          rembgUrl={processedHeroUrl}
+          onApply={(_dataUrl) => {
+            // Placeholder — full wiring in step 6
+            setEditingHero(false)
+          }}
+          onCancel={() => setEditingHero(false)}
+        />
+      )}
     </div>
   )
 }
