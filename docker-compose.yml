@@ -1,0 +1,27 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Secrets — generate these locally first, then mount read-only
+      - ./backend/client_secrets.json:/app/client_secrets.json:ro
+      - ./backend/gcs_key.json:/app/gcs_key.json:ro
+      # OAuth token — generate with `uvicorn app.main:app` locally first (opens browser)
+      - ./backend/token.pickle:/app/token.pickle
+      # U2-Net model cache (~176 MB, downloaded on first background-removal job)
+      - u2net_cache:/root/.u2net
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  u2net_cache:

@@ -27,6 +27,9 @@ backend/scripts/*.jpeg
 backend/scripts/*.png
 backend/scripts/*.webp
 
+# Docker local overrides
+docker-compose.override.yml
+
 # IDE
 .idea/
 .vscode/

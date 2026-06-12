@@ -122,6 +122,30 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+## Running with Docker
+
+Docker runs both the backend and the frontend (built and served by nginx, which also proxies `/api/` to the backend).
+
+**Before first run**, you must generate `token.pickle` locally — the OAuth flow opens a browser window which Docker cannot do:
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --port 8000
+# approve in the browser, then Ctrl-C
+```
+
+Then start everything:
+
+```bash
+cp backend/.env.example backend/.env   # fill in your values
+docker compose up --build
+```
+
+The app is available at `http://localhost`. The backend API is also directly accessible at `http://localhost:8000`.
+
+The U2-Net model (~176 MB) downloads into a named Docker volume (`u2net_cache`) on the first background-removal job and is reused on subsequent runs.
+
 ## API endpoints
 
 | Method | Path | Description |
