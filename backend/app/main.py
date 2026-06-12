@@ -7,8 +7,8 @@ from pydantic import BaseModel
 
 from app.images.processor import process_hero, process_supporting_image
 from app.scraping.scraper import scrape_product
-from app.shared.models import ProductSlideInput
-from app.slides.generator import generate_slide
+from app.shared.models import ProductSlideInput, TwoProductSlideInput
+from app.slides.generator import generate_slide, generate_two_slide
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +24,7 @@ app.add_middleware(
 GCS_BUCKET = os.environ.get("GCS_BUCKET_NAME", "hudson-crane-assets")
 TEMPLATE_PRESENTATION_ID = os.environ.get("TEMPLATE_PRESENTATION_ID", "")
 TEMPLATE_SLIDE_ID = os.environ.get("TEMPLATE_SLIDE_ID", "p")
+TWO_PRODUCT_TEMPLATE_SLIDE_ID = os.environ.get("TWO_PRODUCT_TEMPLATE_SLIDE_ID", "g3eac671c004_0_16")
 CLIENT_SECRETS_FILE = os.environ.get("OAUTH_CLIENT_SECRETS_FILE", "client_secrets.json")
 
 
@@ -88,5 +89,36 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Slide generation failed: {e}")
+
+    return GenerateResponse(deck_url=deck_url)
+
+
+@app.post("/api/generate-two", response_model=GenerateResponse)
+async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
+    # Process both heroes — either failure is fatal
+    try:
+        hero_a_url = await process_hero(body.product_a.hero_image_url, GCS_BUCKET)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Product A background removal failed: {e}")
+
+    try:
+        hero_b_url = await process_hero(body.product_b.hero_image_url, GCS_BUCKET)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Product B background removal failed: {e}")
+
+    two_product_ready = TwoProductSlideInput(
+        product_a=body.product_a.model_copy(update={"hero_image_url": hero_a_url}),
+        product_b=body.product_b.model_copy(update={"hero_image_url": hero_b_url}),
+    )
+
+    try:
+        deck_url = generate_two_slide(
+            two_product_ready,
+            TEMPLATE_PRESENTATION_ID,
+            TWO_PRODUCT_TEMPLATE_SLIDE_ID,
+            CLIENT_SECRETS_FILE,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Two-product slide generation failed: {e}")
 
     return GenerateResponse(deck_url=deck_url)

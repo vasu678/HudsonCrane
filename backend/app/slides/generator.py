@@ -7,7 +7,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from app.shared.models import ProductSlideInput
+from app.shared.models import ProductSlideInput, TwoProductSlideInput
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +35,12 @@ def _get_credentials(client_secrets_file: str) -> Credentials:
     return creds
 
 
-def _build_image_slots(svc, presentation_id: str, slide_id: str) -> dict[str, str]:
+def _build_image_slots(
+    svc,
+    presentation_id: str,
+    slide_id: str,
+    expected: tuple[str, ...] = ("hero", "support1", "support2"),
+) -> dict[str, str]:
     """Return {alt_title: objectId} for every tagged image on the duplicated slide."""
     pres = svc.presentations().get(
         presentationId=presentation_id,
@@ -47,9 +52,9 @@ def _build_image_slots(svc, presentation_id: str, slide_id: str) -> dict[str, st
         for el in slide.get("pageElements", [])
         if "image" in el and el.get("title")
     }
-    for expected in ("hero", "support1", "support2"):
-        if expected not in slots:
-            log.warning("Template image slot '%s' not found — check alt text in template", expected)
+    for name in expected:
+        if name not in slots:
+            log.warning("Template image slot '%s' not found — check alt text in template", name)
     return slots
 
 
@@ -125,6 +130,55 @@ def generate_slide(
             })
         else:
             requests.append({"deleteObject": {"objectId": slot}})
+
+    svc.presentations().batchUpdate(
+        presentationId=template_presentation_id,
+        body={"requests": requests},
+    ).execute()
+
+    return f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+
+
+def generate_two_slide(
+    two_product: TwoProductSlideInput,
+    template_presentation_id: str,
+    template_slide_id: str,
+    client_secrets_file: str,
+) -> str:
+    """Clone two-product template slide, replace tokens + both hero images. Returns deck URL."""
+    creds = _get_credentials(client_secrets_file)
+    svc = build("slides", "v1", credentials=creds)
+
+    # 1. Duplicate two-product template slide
+    dup = (
+        svc.presentations()
+        .batchUpdate(
+            presentationId=template_presentation_id,
+            body={"requests": [{"duplicateObject": {"objectId": template_slide_id}}]},
+        )
+        .execute()
+    )
+    new_slide_id: str = dup["replies"][0]["duplicateObject"]["objectId"]
+
+    # 2. Build alt-text → objectId map for the duplicated slide
+    image_slots = _build_image_slots(
+        svc, template_presentation_id, new_slide_id,
+        expected=("hero_a", "hero_b"),
+    )
+
+    # 3. Build batchUpdate requests: text tokens + both hero images
+    a = two_product.product_a
+    b = two_product.product_b
+    requests: list[dict] = [
+        {"replaceAllText": {"containsText": {"text": "{{title_a}}", "matchCase": True}, "replaceText": a.name, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{dims_a}}", "matchCase": True}, "replaceText": a.dimensions, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{desc_a}}", "matchCase": True}, "replaceText": a.description, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{title_b}}", "matchCase": True}, "replaceText": b.name, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{dims_b}}", "matchCase": True}, "replaceText": b.dimensions, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{desc_b}}", "matchCase": True}, "replaceText": b.description, "pageObjectIds": [new_slide_id]}},
+        {"replaceImage": {"imageObjectId": image_slots["hero_a"], "url": a.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
+        {"replaceImage": {"imageObjectId": image_slots["hero_b"], "url": b.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
+    ]
 
     svc.presentations().batchUpdate(
         presentationId=template_presentation_id,
