@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from app.images.processor import process_hero, process_supporting_image
+from app.images.processor import finalize_hero, process_hero, process_supporting_image
 from app.scraping.scraper import scrape_product
 from app.shared.models import ProductSlideInput, TwoProductSlideInput
 from app.slides.generator import generate_slide, generate_two_slide
@@ -49,6 +49,15 @@ class ProcessHeroResponse(BaseModel):
     hero_url: str
 
 
+class FinalizeHeroRequest(BaseModel):
+    original_url: str
+    mask_data_url: str  # PNG data URL from the browser mask canvas
+
+
+class FinalizeHeroResponse(BaseModel):
+    hero_url: str
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -67,11 +76,14 @@ async def scrape(req: ScrapeRequest) -> ScrapeResponse:
 
 @app.post("/api/generate", response_model=GenerateResponse)
 async def generate(product: ProductSlideInput) -> GenerateResponse:
-    # 1. Hero — fatal if this fails
-    try:
-        hero_url = await process_hero(product.hero_image_url, GCS_BUCKET)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
+    # 1. Hero — use finalized URL if the user applied the mask editor, else run rembg
+    if product.finalized_hero_url:
+        hero_url = product.finalized_hero_url
+    else:
+        try:
+            hero_url = await process_hero(product.hero_image_url, GCS_BUCKET)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
 
     # 2. Supporting images — non-fatal; bad URLs are skipped
     support_urls: list[str] = []
@@ -139,6 +151,17 @@ async def process_hero_endpoint(req: ScrapeRequest) -> ProcessHeroResponse:
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
     return ProcessHeroResponse(hero_url=hero_url)
+
+
+@app.post("/api/finalize-hero", response_model=FinalizeHeroResponse)
+async def finalize_hero_endpoint(req: FinalizeHeroRequest) -> FinalizeHeroResponse:
+    """Composite the original vendor image with the browser-edited mask and upload to GCS.
+    Called when the user clicks Apply in the mask editor."""
+    try:
+        hero_url = await finalize_hero(req.original_url, req.mask_data_url, GCS_BUCKET)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Mask finalization failed: {e}")
+    return FinalizeHeroResponse(hero_url=hero_url)
 
 
 @app.get("/api/image-proxy")

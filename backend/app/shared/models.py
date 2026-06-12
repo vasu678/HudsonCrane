@@ -9,6 +9,7 @@ class ProductSlideInput(BaseModel):
     name: str
     dimensions: str  # preserve vendor's raw format — do NOT normalize
     description: str
+    finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg in generate
 
 
 class ProductInput(BaseModel):

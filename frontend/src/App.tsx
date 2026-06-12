@@ -117,6 +117,8 @@ export default function App() {
   const [processingHero, setProcessingHero] = useState(false)
   const [processedHeroUrl, setProcessedHeroUrl] = useState('')
   const [editingHero, setEditingHero] = useState(false)
+  const [finalizingHero, setFinalizingHero] = useState(false)
+  const [finalHeroUrl, setFinalHeroUrl] = useState('')
 
   // two-product
   const [urlA, setUrlA] = useState('')
@@ -154,6 +156,7 @@ export default function App() {
     setSupportingIndices(prev => prev.filter(idx => idx !== i))
     setHeroIndex(i)
     setProcessedHeroUrl('')  // stale once hero changes
+    setFinalHeroUrl('')
   }
 
   function toggleSupporting(i: number, e: React.MouseEvent) {
@@ -198,6 +201,7 @@ export default function App() {
           hero_image_url: displayedImages[heroIndex],
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
           name, dimensions, description,
+          ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
         }),
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
@@ -228,6 +232,26 @@ export default function App() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setProcessingHero(false)
+    }
+  }
+
+  async function handleMaskApply(maskDataUrl: string) {
+    setEditingHero(false)
+    setFinalizingHero(true)
+    setError('')
+    try {
+      const res = await fetch('/api/finalize-hero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original_url: displayedImages[heroIndex], mask_data_url: maskDataUrl }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Finalize failed') }
+      const { hero_url } = await res.json()
+      setFinalHeroUrl(hero_url)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setFinalizingHero(false)
     }
   }
 
@@ -278,6 +302,7 @@ export default function App() {
     setStep('input'); setUrl(''); setScraped(null); setDeckUrl(''); setError('')
     setBroken(new Set()); setSupportingIndices([])
     setProcessedHeroUrl(''); setEditingHero(false); setProcessingHero(false)
+    setFinalHeroUrl(''); setFinalizingHero(false)
     setUrlA(''); setUrlB(''); setScrapedA(null); setScrapedB(null)
     setBrokenA(new Set()); setBrokenB(new Set())
   }
@@ -429,18 +454,22 @@ export default function App() {
             <div className="flex items-center justify-between py-1">
               <p className="text-xs text-stone-400">
                 Background removal runs on the hero.{' '}
-                {processedHeroUrl ? (
-                  <span className="text-emerald-600 font-medium">Cutout preview ready.</span>
+                {finalHeroUrl ? (
+                  <span className="text-emerald-600 font-medium">Custom cutout applied.</span>
+                ) : finalizingHero ? (
+                  <span className="text-stone-500">Uploading edited cutout…</span>
+                ) : processedHeroUrl ? (
+                  <span className="text-stone-500">Cutout ready — edit or generate.</span>
                 ) : (
                   'Optionally inspect and touch up the cutout before generating.'
                 )}
               </p>
               <button
                 onClick={handleEditCutout}
-                disabled={processingHero || step !== 'review'}
+                disabled={processingHero || finalizingHero || step !== 'review'}
                 className="shrink-0 ml-4 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 rounded-lg hover:border-stone-600 hover:text-stone-800 disabled:opacity-40 transition-colors"
               >
-                {processingHero ? 'Processing…' : processedHeroUrl ? 'Re-edit cutout' : 'Edit cutout'}
+                {processingHero ? 'Processing…' : finalizingHero ? 'Uploading…' : (processedHeroUrl || finalHeroUrl) ? 'Re-edit cutout' : 'Edit cutout'}
               </button>
             </div>
 
@@ -534,10 +563,7 @@ export default function App() {
         <MaskEditor
           originalUrl={displayedImages[heroIndex]}
           rembgUrl={processedHeroUrl}
-          onApply={(_dataUrl) => {
-            // Placeholder — full wiring in step 6
-            setEditingHero(false)
-          }}
+          onApply={handleMaskApply}
           onCancel={() => setEditingHero(false)}
         />
       )}
