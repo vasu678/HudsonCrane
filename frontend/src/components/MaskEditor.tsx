@@ -182,6 +182,11 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
     return () => { alive = false }
   }, [originalUrl, rembgUrl, renderComposite])
 
+  // Re-render once the canvas becomes visible (initial draw happened while it was hidden)
+  useEffect(() => {
+    if (ready) renderComposite()
+  }, [ready, renderComposite])
+
   // Wheel handler — must be non-passive to call preventDefault
   useEffect(() => {
     if (!ready) return
@@ -373,7 +378,7 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
         className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-4xl overflow-hidden"
-        style={{ maxHeight: '92vh' }}
+        style={{ height: '88vh' }}
       >
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-stone-200">
