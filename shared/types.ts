@@ -1,22 +1,31 @@
-// Handoff contract between scraping/image pipeline and slide generator.
-// Keep in sync with backend/app/shared/models.py.
+// Wire-format contract between frontend and backend.
+// Keep in sync with backend/app/models.py.
+// Property names match the snake_case JSON the API accepts and returns.
 
 export interface ProductSlideInput {
-  heroImageUrl: string;          // transparent PNG, hosted at a public URL
-  supportingImageUrls: string[]; // rectangular lifestyle/detail images, hosted
-  name: string;
-  dimensions: string;            // preserve vendor's raw format; do NOT normalize
-  description: string;
+  hero_image_url: string
+  supporting_image_urls: string[]
+  name: string
+  dimensions: string
+  description: string
+  finalized_hero_url?: string
 }
 
 export interface ProductInput {
-  heroImageUrl: string;          // transparent PNG, hosted at a public URL
-  name: string;
-  dimensions: string;            // preserve vendor's raw format; do NOT normalize
-  description: string;
+  hero_image_url: string
+  name: string
+  dimensions: string
+  description: string
 }
 
 export interface TwoProductSlideInput {
-  productA: ProductInput;
-  productB: ProductInput;
+  product_a: ProductInput
+  product_b: ProductInput
+}
+
+export interface ScrapeResponse {
+  name: string
+  dimensions: string
+  description: string
+  images: string[]
 }

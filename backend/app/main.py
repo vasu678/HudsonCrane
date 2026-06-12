@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.images.processor import finalize_hero, process_hero, process_supporting_image
 from app.scraping.scraper import scrape_product
-from app.shared.models import ProductSlideInput, TwoProductSlideInput
+from app.models import ProductSlideInput, TwoProductSlideInput
 from app.slides.generator import generate_slide, generate_two_slide
 
 log = logging.getLogger(__name__)
