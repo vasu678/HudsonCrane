@@ -182,6 +182,7 @@ export default function App() {
       const data: ScrapeResult = await res.json()
       setScraped(data); setName(data.name); setDimensions(data.dimensions); setDescription(data.description)
       setHeroIndex(0); setSupportingIndices([]); setBroken(new Set())
+      setProcessedHeroUrl(''); setFinalHeroUrl(''); setEditingHero(false); setFinalizingHero(false)
       setStep('review')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
