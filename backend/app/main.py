@@ -11,7 +11,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.images.processor import finalize_hero, process_hero, process_supporting_image
-from app.scraping.scraper import scrape_product
+import app.scraping.vendors  # noqa: F401 — registers vendor adapters
+from app.scraping.registry import scrape as scrape_product
 from app.models import ProductSlideInput, TwoProductSlideInput
 from app.slides.generator import generate_slide, generate_two_slide
 
