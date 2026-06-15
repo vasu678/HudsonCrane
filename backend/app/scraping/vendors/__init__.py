@@ -1,1 +1,4 @@
-# Vendor adapters are registered here as they are added (see four_hands.py, etc.)
+from app.scraping.registry import register
+from app.scraping.vendors.four_hands import FourHandsScraper
+
+register(FourHandsScraper())
