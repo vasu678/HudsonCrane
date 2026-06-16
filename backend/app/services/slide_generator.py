@@ -7,7 +7,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from app.models import ProductSlideInput, TwoProductSlideInput
+from app.models.slide import ProductSlideInput, TwoProductSlideInput
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +68,6 @@ def generate_slide(
     creds = _get_credentials(client_secrets_file)
     svc = build("slides", "v1", credentials=creds)
 
-    # 1. Duplicate template slide
     dup = (
         svc.presentations()
         .batchUpdate(
@@ -79,55 +78,22 @@ def generate_slide(
     )
     new_slide_id: str = dup["replies"][0]["duplicateObject"]["objectId"]
 
-    # 2. Build alt-text → objectId map for image slots on the duplicated slide
     image_slots = _build_image_slots(svc, template_presentation_id, new_slide_id)
 
-    # 3. Build batchUpdate requests: text tokens + hero + support slots
     requests: list[dict] = [
-        {
-            "replaceAllText": {
-                "containsText": {"text": "{{title}}", "matchCase": True},
-                "replaceText": product.name,
-                "pageObjectIds": [new_slide_id],
-            }
-        },
-        {
-            "replaceAllText": {
-                "containsText": {"text": "{{dims}}", "matchCase": True},
-                "replaceText": product.dimensions,
-                "pageObjectIds": [new_slide_id],
-            }
-        },
-        {
-            "replaceAllText": {
-                "containsText": {"text": "{{desc}}", "matchCase": True},
-                "replaceText": product.description,
-                "pageObjectIds": [new_slide_id],
-            }
-        },
-        {
-            "replaceImage": {
-                "imageObjectId": image_slots["hero"],
-                "url": product.hero_image_url,
-                "imageReplaceMethod": IMAGE_REPLACE_HERO,
-            }
-        },
+        {"replaceAllText": {"containsText": {"text": "{{title}}", "matchCase": True}, "replaceText": product.name, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{dims}}", "matchCase": True}, "replaceText": product.dimensions, "pageObjectIds": [new_slide_id]}},
+        {"replaceAllText": {"containsText": {"text": "{{desc}}", "matchCase": True}, "replaceText": product.description, "pageObjectIds": [new_slide_id]}},
+        {"replaceImage": {"imageObjectId": image_slots["hero"], "url": product.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
     ]
 
-    # Supporting slots: fill what we have, delete the rest
     support_urls = product.supporting_image_urls[:2]
     for i in range(2):
         slot = image_slots.get(f"support{i + 1}")
         if slot is None:
-            continue  # template missing this slot — already warned in _build_image_slots
+            continue
         if i < len(support_urls):
-            requests.append({
-                "replaceImage": {
-                    "imageObjectId": slot,
-                    "url": support_urls[i],
-                    "imageReplaceMethod": IMAGE_REPLACE_SUPPORT,
-                }
-            })
+            requests.append({"replaceImage": {"imageObjectId": slot, "url": support_urls[i], "imageReplaceMethod": IMAGE_REPLACE_SUPPORT}})
         else:
             requests.append({"deleteObject": {"objectId": slot}})
 
@@ -149,7 +115,6 @@ def generate_two_slide(
     creds = _get_credentials(client_secrets_file)
     svc = build("slides", "v1", credentials=creds)
 
-    # 1. Duplicate two-product template slide
     dup = (
         svc.presentations()
         .batchUpdate(
@@ -160,13 +125,11 @@ def generate_two_slide(
     )
     new_slide_id: str = dup["replies"][0]["duplicateObject"]["objectId"]
 
-    # 2. Build alt-text → objectId map for the duplicated slide
     image_slots = _build_image_slots(
         svc, template_presentation_id, new_slide_id,
         expected=("hero_a", "hero_b"),
     )
 
-    # 3. Build batchUpdate requests: text tokens + both hero images
     a = two_product.product_a
     b = two_product.product_b
     requests: list[dict] = [

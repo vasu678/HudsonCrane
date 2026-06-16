@@ -4,18 +4,18 @@ from pydantic import BaseModel
 class ProductSlideInput(BaseModel):
     """Handoff contract between scraping/image pipeline and slide generator."""
 
-    hero_image_url: str  # transparent PNG at a publicly reachable URL
-    supporting_image_urls: list[str] = []  # lifestyle/detail images, no bg removal
+    hero_image_url: str
+    supporting_image_urls: list[str] = []
     name: str
     dimensions: str  # preserve vendor's raw format — do NOT normalize
     description: str
-    finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg in generate
+    finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg
 
 
 class ProductInput(BaseModel):
     """One product's content for the two-product slide."""
 
-    hero_image_url: str  # transparent PNG at a publicly reachable URL
+    hero_image_url: str
     name: str
     dimensions: str  # preserve vendor's raw format — do NOT normalize
     description: str
