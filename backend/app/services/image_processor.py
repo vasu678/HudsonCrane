@@ -57,26 +57,18 @@ async def process_supporting_image(image_url: str, bucket_name: str) -> str:
 
 
 async def finalize_hero(original_url: str, mask_data_url: str, bucket_name: str) -> str:
-    """Composite original image with browser-edited mask, upload as PNG. Returns public GCS URL.
-
-    mask_data_url is a PNG data URL (data:image/png;base64,...) from the mask canvas.
-    The mask canvas has R=G=B=255, A=desired_alpha for every pixel.
-    """
-    # Download and scale the original to working resolution
+    """Composite original image with browser-edited mask, upload as PNG. Returns public GCS URL."""
     raw = _download(original_url)
     orig = Image.open(io.BytesIO(raw)).convert("RGBA")
     if max(orig.size) > MAX_DIMENSION:
         orig.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
 
-    # Decode the mask PNG from the data URL
     _, b64data = mask_data_url.split(",", 1)
     mask_img = Image.open(io.BytesIO(base64.b64decode(b64data))).convert("RGBA")
 
-    # Resize mask to match original if dimensions diverged
     if mask_img.size != orig.size:
         mask_img = mask_img.resize(orig.size, Image.LANCZOS)
 
-    # Apply mask alpha to original RGB
     r, g, b, _ = orig.split()
     mask_alpha = mask_img.split()[3]
     result = Image.merge("RGBA", (r, g, b, mask_alpha))
