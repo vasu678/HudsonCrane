@@ -4,7 +4,7 @@ A web tool for Hudson & Crane, an interior design firm, that turns a trade-vendo
 
 ## How it works
 
-1. Paste a vendor product URL (Pottery Barn, Anthropologie, etc.)
+1. Paste a vendor product URL (Pottery Barn, Four Hands, Uttermost, etc.)
 2. The backend scrapes the page and extracts the product name, dimensions, description, and up to 16 images
 3. Review the scraped data — pick the hero image (background removed automatically), add up to 2 supporting images, and edit any text
 4. Optionally open the mask editor to touch up the background removal by hand
@@ -13,10 +13,24 @@ A web tool for Hudson & Crane, an interior design firm, that turns a trade-vendo
 
 Two-product mode works the same way with two URLs, producing a single side-by-side slide.
 
+## Supported vendors
+
+The scraper has a dedicated adapter for each of these vendors, which extracts structured data directly and reliably:
+
+| Vendor | Method |
+|--------|--------|
+| Four Hands (`fourhands.com`) | Static HTML — Vue component JSON |
+| Rowe Furniture (`rowefurniture.com`) | Static HTML — embedded JS object |
+| York Wallcoverings (`yorkwallcoverings.com`) | Static HTML — OG tags + spec table |
+| Uttermost (`uttermost.com`) | Direct GraphQL → Playwright fallback |
+| Moe's Home (`moeshome.com`) | Direct GraphQL → Playwright fallback |
+
+Any URL not matched to a known vendor goes through the generic scraper — static HTML first, Playwright (full Chrome) fallback for JS-rendered or bot-protected pages. Pottery Barn and Anthropologie work via this generic path. Home Depot and Wayfair are blocked by enterprise bot protection — use manual text entry for those.
+
 ## Tech stack
 
-**Backend** — Python 3.12, FastAPI, Uvicorn  
-**Scraping** — httpx (static), Playwright + Chromium (JS-rendered / bot-protected pages)  
+**Backend** — Python 3.12+, FastAPI, Uvicorn  
+**Scraping** — httpx (static), Playwright + Chromium (JS-rendered / bot-protected pages), direct GraphQL for supported vendors  
 **Background removal** — rembg (U2-Net), Pillow, OpenCV  
 **Storage** — Google Cloud Storage (image hosting)  
 **Slide generation** — Google Slides API + Google Drive API  
@@ -28,31 +42,45 @@ Two-product mode works the same way with two URLs, producing a single side-by-si
 .
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app and all API endpoints
-│   │   ├── models.py            # Pydantic request/response models
-│   │   ├── images/
-│   │   │   └── processor.py     # Download, background removal, GCS upload
-│   │   ├── scraping/
-│   │   │   └── scraper.py       # Static + Playwright scraper
-│   │   └── slides/
-│   │       └── generator.py     # Google Slides API — clone template, replace content
-│   ├── scripts/                 # One-off dev and diagnostic scripts (not production)
+│   │   ├── main.py                  # FastAPI app — mounts API routers
+│   │   ├── config.py                # Settings loaded from .env (pydantic-settings)
+│   │   ├── api/
+│   │   │   ├── scrape.py            # POST /api/scrape
+│   │   │   ├── generate.py          # POST /api/generate, /api/generate-two
+│   │   │   └── images.py            # POST /api/process-hero, /api/finalize-hero, GET /api/image-proxy
+│   │   ├── models/
+│   │   │   ├── slide.py             # ProductSlideInput, TwoProductSlideInput
+│   │   │   └── requests.py          # ScrapeRequest/Response and other wire types
+│   │   ├── services/
+│   │   │   ├── image_processor.py   # Download, background removal, GCS upload
+│   │   │   └── slide_generator.py   # Google Slides API — clone template, replace content
+│   │   └── scraping/
+│   │       ├── scraper.py           # Generic static + Playwright scraper (fallback)
+│   │       ├── base.py              # ScrapeResult TypedDict + VendorScraper Protocol
+│   │       ├── registry.py          # Domain → adapter registry; unknown → generic
+│   │       └── vendors/
+│   │           ├── four_hands.py    # Four Hands adapter
+│   │           ├── rowe.py          # Rowe Furniture adapter
+│   │           ├── york.py          # York Wallcoverings adapter
+│   │           ├── uttermost.py     # Uttermost adapter (GraphQL)
+│   │           └── moeshome.py      # Moe's Home adapter (GraphQL)
+│   ├── scripts/                     # One-off dev and diagnostic scripts (not production)
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
-│       ├── App.tsx              # Root shell — mode toggle, view routing
-│       ├── types.ts             # Shared UI types
+│       ├── App.tsx                  # Root shell — mode toggle, view routing
+│       ├── types.ts                 # Shared UI types
 │       ├── views/
 │       │   ├── SingleProductView.tsx
 │       │   └── TwoProductView.tsx
 │       └── components/
-│           ├── MaskEditor.tsx   # Canvas-based background-removal touch-up tool
+│           ├── MaskEditor.tsx       # Canvas-based background-removal touch-up tool
 │           └── ProductPanel.tsx
 ├── shared/
-│   └── types.ts                 # Wire-format contract (keep in sync with models.py)
+│   └── types.ts                     # Wire-format contract (keep in sync with models/)
 ├── docs/
-│   └── SPEC_*.md                # Feature specs
-└── CLAUDE.md                    # Project context for Claude Code
+│   └── SPEC_*.md                    # Feature specs
+└── CLAUDE.md                        # Project context for Claude Code
 ```
 
 ## Prerequisites
@@ -176,7 +204,8 @@ Skipping the editor leaves the automatic cutout unchanged.
 
 ## Known limitations
 
-- Tested vendors: Pottery Barn (Playwright), Anthropologie (static). Home Depot and Wayfair are blocked by PerimeterX — use manual text entry for those.
+- Home Depot and Wayfair are blocked by PerimeterX enterprise bot protection — use manual text entry for those.
+- Anthropologie scrapes name and images but not dimensions (dimensions are JS-rendered; the static page carries enough data to avoid escalating to Playwright). User can fill dimensions in manually.
 - Background removal can struggle with thin legs, glass, or reflective surfaces. The mask editor exists to fix these cases.
 - The template deck accumulates generated slides over time — no cleanup is implemented yet.
 - GCS bucket is currently public-read. Signed short-expiry URLs are planned before production deployment.
@@ -194,6 +223,5 @@ The following files are gitignored and must never be committed:
 
 ## Roadmap
 
-- **Band 2** — test against the full client vendor list; add a paid unblocker (ScraperAPI / Zyte) for bot-protected sites behind a config flag
 - **Band 3** — multiple template variants, LLM-assisted template selection, in-browser preview
 - **Band 4** — deploy to Cloud Run + Vercel, signed GCS URLs, production OAuth flow
