@@ -19,6 +19,7 @@ TOKEN_PATH = Path("token.pickle")
 
 IMAGE_REPLACE_HERO = "CENTER_INSIDE"
 IMAGE_REPLACE_SUPPORT = "CENTER_CROP"
+MAX_SUPPORTS = 5
 
 
 def _get_credentials(client_secrets_file: str) -> Credentials:
@@ -39,7 +40,7 @@ def _build_image_slots(
     svc,
     presentation_id: str,
     slide_id: str,
-    expected: tuple[str, ...] = ("hero", "support1", "support2"),
+    expected: tuple[str, ...] = ("hero", *[f"support{i}" for i in range(1, MAX_SUPPORTS + 1)]),
 ) -> dict[str, str]:
     """Return {alt_title: objectId} for every tagged image on the duplicated slide."""
     pres = svc.presentations().get(
@@ -87,8 +88,8 @@ def generate_slide(
         {"replaceImage": {"imageObjectId": image_slots["hero"], "url": product.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
     ]
 
-    support_urls = product.supporting_image_urls[:2]
-    for i in range(2):
+    support_urls = product.supporting_image_urls[:MAX_SUPPORTS]
+    for i in range(MAX_SUPPORTS):
         slot = image_slots.get(f"support{i + 1}")
         if slot is None:
             continue

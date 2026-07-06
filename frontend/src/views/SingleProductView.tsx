@@ -36,12 +36,14 @@ export default function SingleProductView() {
     setFinalHeroUrl('')
   }
 
+  const MAX_SUPPORTS = 5
+
   function toggleSupporting(i: number, e: React.MouseEvent) {
     e.stopPropagation()
     if (i === heroIndex) return
     setSupportingIndices(prev => {
       if (prev.includes(i)) return prev.filter(idx => idx !== i)
-      if (prev.length >= 2) return prev
+      if (prev.length >= MAX_SUPPORTS) return prev
       return [...prev, i]
     })
   }
@@ -170,14 +172,14 @@ export default function SingleProductView() {
           <div>
             <p className="text-xs text-stone-500 mb-3">
               Click an image to set it as the <strong>hero</strong> (background removed).
-              Use <strong>+</strong> to add up to 2 <span className="text-emerald-700 font-medium">supporting</span> images (kept as-is).
+              Use <strong>+</strong> to add up to {MAX_SUPPORTS} <span className="text-emerald-700 font-medium">supporting</span> images (kept as-is).
             </p>
             <div className="grid grid-cols-4 gap-3">
               {displayedImages.map((img, i) => {
                 const isHero = heroIndex === i
                 const supportRank = supportingIndices.indexOf(i)
                 const isSupporting = supportRank !== -1
-                const canAdd = !isHero && !isSupporting && supportingIndices.length < 2
+                const canAdd = !isHero && !isSupporting && supportingIndices.length < MAX_SUPPORTS
                 return (
                   <button
                     key={img}
@@ -218,7 +220,7 @@ export default function SingleProductView() {
             {supportingIndices.length > 0 && (
               <p className="text-xs text-emerald-700 mt-2">
                 {supportingIndices.length} supporting image{supportingIndices.length > 1 ? 's' : ''} selected
-                {supportingIndices.length < 2 && ' (you can add 1 more)'}
+                {supportingIndices.length < MAX_SUPPORTS && ` (you can add up to ${MAX_SUPPORTS - supportingIndices.length} more)`}
               </p>
             )}
           </div>
