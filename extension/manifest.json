@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Hudson & Crane",
+  "version": "1.0",
+  "description": "Extract product data from vendor pages for the Hudson & Crane Slide Generator",
+  "permissions": ["activeTab", "scripting", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Hudson & Crane"
+  }
+}

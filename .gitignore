@@ -4,6 +4,7 @@
 !package.json
 !package-lock.json
 !tsconfig*.json
+!extension/manifest.json
 token.pickle
 *_service_account*.json
 
