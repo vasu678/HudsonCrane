@@ -6,7 +6,7 @@ from app.config import settings
 from app.models.requests import GenerateResponse
 from app.models.slide import ProductSlideInput, TwoProductSlideInput
 from app.services.image_processor import process_hero, process_supporting_image
-from app.services.slide_generator import generate_slide, generate_two_slide
+from app.services.slide_generator import MAX_SUPPORTS, generate_slide, generate_two_slide
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -23,7 +23,7 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
             raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
 
     support_urls: list[str] = []
-    for vendor_url in product.supporting_image_urls[:2]:
+    for vendor_url in product.supporting_image_urls[:MAX_SUPPORTS]:
         try:
             support_urls.append(await process_supporting_image(vendor_url, settings.gcs_bucket_name))
         except Exception as exc:
