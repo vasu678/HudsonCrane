@@ -4,10 +4,21 @@ import uuid
 
 import httpx
 from google.cloud import storage
+from google.oauth2 import service_account
 from PIL import Image
 from rembg import remove
 
+from app.config import settings
+
 MAX_DIMENSION = 1500
+
+
+def _gcs_client() -> storage.Client:
+    creds = service_account.Credentials.from_service_account_file(
+        settings.google_application_credentials,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    return storage.Client(credentials=creds)
 
 
 def _download(url: str) -> bytes:
@@ -35,7 +46,7 @@ def _downscale_jpeg(data: bytes) -> bytes:
 
 
 def _upload(data: bytes, bucket_name: str, prefix: str, content_type: str, ext: str) -> str:
-    client = storage.Client()
+    client = _gcs_client()
     blob = client.bucket(bucket_name).blob(f"{prefix}/{uuid.uuid4().hex}.{ext}")
     blob.upload_from_string(data, content_type=content_type)
     return f"https://storage.googleapis.com/{bucket_name}/{blob.name}"
