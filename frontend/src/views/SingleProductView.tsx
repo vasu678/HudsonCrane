@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import MaskEditor from '../components/MaskEditor'
 import type { BrokenSet, ScrapeResult, Step } from '../types'
 
@@ -22,6 +22,33 @@ export default function SingleProductView() {
   const [editingHero, setEditingHero] = useState(false)
   const [finalizingHero, setFinalizingHero] = useState(false)
   const [finalHeroUrl, setFinalHeroUrl] = useState('')
+
+  // ── Extension handoff: read ext_data from URL params ─────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const extData = params.get('ext_data')
+    if (!extData) return
+    try {
+      const decoded = JSON.parse(decodeURIComponent(atob(extData))) as ScrapeResult & { source_url?: string }
+      setScraped(decoded)
+      setName(decoded.name || '')
+      setDimensions(decoded.dimensions || '')
+      setDescription(decoded.description || '')
+      if (decoded.source_url) setUrl(decoded.source_url)
+      setHeroIndex(0)
+      setSupportingIndices([])
+      setBroken(new Set())
+      setProcessedHeroUrl('')
+      setFinalHeroUrl('')
+      setEditingHero(false)
+      setFinalizingHero(false)
+      setStep('review')
+      // Clean the URL so reloading doesn't re-trigger this
+      window.history.replaceState({}, '', window.location.pathname)
+    } catch (e) {
+      setError('Failed to read data from the Chrome extension. Please try again.')
+    }
+  }, [])
 
   const displayedImages = scraped
     ? scraped.images.slice(0, 12).filter(img => !broken.has(img)).slice(0, 8)

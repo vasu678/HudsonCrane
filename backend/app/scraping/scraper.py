@@ -6,6 +6,7 @@ from html.parser import HTMLParser
 import httpx
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
+from seleniumbase import cdp_driver
 
 STATIC_MIN_BYTES = 50_000
 BROWSER_UA = (
@@ -53,30 +54,16 @@ def _fetch_static(url: str) -> str | None:
 
 async def _fetch_playwright(url: str) -> str:
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            channel="chrome",
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        ctx = await browser.new_context(
-            user_agent=BROWSER_UA,
-            viewport={"width": 1280, "height": 800},
-            locale="en-US",
-            extra_http_headers={
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Upgrade-Insecure-Requests": "1",
-            },
-        )
-        # Hide webdriver flag
-        await ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        page = await ctx.new_page()
+        executable_path = p.chromium.executable_path
+        driver = await cdp_driver.start_async(browser_executable_path=executable_path)
+        endpoint_url = driver.get_endpoint_url()
+        
+        browser = await p.chromium.connect_over_cdp(endpoint_url)
+        page = browser.contexts[0].pages[0]
+        
         await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
         await page.wait_for_timeout(3_000)
+        
         # Click any collapsed dimensions/details accordion so the text is in the DOM
         for sel in [
             'button:has-text("Dimensions")',
@@ -95,6 +82,7 @@ async def _fetch_playwright(url: str) -> str:
                     break
             except Exception:
                 pass
+        
         html = await page.content()
         await browser.close()
         return html
