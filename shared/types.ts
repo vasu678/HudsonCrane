@@ -9,6 +9,7 @@ export interface ProductSlideInput {
   dimensions: string
   description: string
   finalized_hero_url?: string
+  drop_shadow?: boolean
 }
 
 export interface ProductInput {
@@ -21,6 +22,7 @@ export interface ProductInput {
 export interface TwoProductSlideInput {
   product_a: ProductInput
   product_b: ProductInput
+  drop_shadow?: boolean
 }
 
 export interface ScrapeResponse {

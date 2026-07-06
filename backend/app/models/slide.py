@@ -10,6 +10,7 @@ class ProductSlideInput(BaseModel):
     dimensions: str  # preserve vendor's raw format — do NOT normalize
     description: str
     finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg
+    drop_shadow: bool = True
 
 
 class ProductInput(BaseModel):
@@ -26,3 +27,4 @@ class TwoProductSlideInput(BaseModel):
 
     product_a: ProductInput
     product_b: ProductInput
+    drop_shadow: bool = True

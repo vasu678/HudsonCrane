@@ -18,6 +18,7 @@ export default function TwoProductView() {
   const [nameB, setNameB] = useState(''); const [dimsB, setDimsB] = useState(''); const [descB, setDescB] = useState('')
   const [brokenA, setBrokenA] = useState<BrokenSet>(new Set())
   const [brokenB, setBrokenB] = useState<BrokenSet>(new Set())
+  const [dropShadow, setDropShadow] = useState(true)
 
   const displayedA = scrapedA
     ? scrapedA.images.slice(0, 12).filter(img => !brokenA.has(img)).slice(0, 4)
@@ -59,6 +60,7 @@ export default function TwoProductView() {
         body: JSON.stringify({
           product_a: { hero_image_url: displayedA[heroIndexA], name: nameA, dimensions: dimsA, description: descA },
           product_b: { hero_image_url: displayedB[heroIndexB], name: nameB, dimensions: dimsB, description: descB },
+          drop_shadow: dropShadow,
         }),
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
@@ -134,6 +136,18 @@ export default function TwoProductView() {
               dimsVal={dimsB} setDimsVal={setDimsB}
               descVal={descB} setDescVal={setDescB}
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="drop-shadow-two"
+              type="checkbox"
+              checked={dropShadow}
+              onChange={e => setDropShadow(e.target.checked)}
+              className="w-4 h-4 accent-stone-700"
+            />
+            <label htmlFor="drop-shadow-two" className="text-sm text-stone-600 select-none cursor-pointer">
+              Drop shadows on images
+            </label>
           </div>
           <button
             onClick={handleGenerateTwo}

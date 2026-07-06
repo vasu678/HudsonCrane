@@ -16,6 +16,7 @@ export default function SingleProductView() {
   const [dimensions, setDimensions] = useState('')
   const [description, setDescription] = useState('')
   const [broken, setBroken] = useState<BrokenSet>(new Set())
+  const [dropShadow, setDropShadow] = useState(true)
 
   const [processingHero, setProcessingHero] = useState(false)
   const [processedHeroUrl, setProcessedHeroUrl] = useState('')
@@ -81,6 +82,7 @@ export default function SingleProductView() {
           hero_image_url: displayedImages[heroIndex],
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
           name, dimensions, description,
+          drop_shadow: dropShadow,
           ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
         }),
       })
@@ -261,6 +263,18 @@ export default function SingleProductView() {
               <label className="block text-xs font-medium text-stone-500 mb-1">Description</label>
               <textarea rows={4} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none" value={description} onChange={e => setDescription(e.target.value)} />
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="drop-shadow-single"
+              type="checkbox"
+              checked={dropShadow}
+              onChange={e => setDropShadow(e.target.checked)}
+              className="w-4 h-4 accent-stone-700"
+            />
+            <label htmlFor="drop-shadow-single" className="text-sm text-stone-600 select-none cursor-pointer">
+              Drop shadows on images
+            </label>
           </div>
           <button
             onClick={handleGenerate}
