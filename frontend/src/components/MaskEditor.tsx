@@ -59,6 +59,7 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
   const offsetRef   = useRef({ x: 0, y: 0 })   // pan in CSS px
   const modeRef     = useRef<Tool>('erase')
   const brushRef    = useRef(30)  // visual diameter in CSS px
+  const blurRef     = useRef(0)   // 0 = hard edge, 100 = fully feathered
   const isPainting  = useRef(false)
   const isPanning   = useRef(false)
   const lastPtr     = useRef({ x: 0, y: 0 })
@@ -70,6 +71,7 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
   // UI state (triggers re-render for controls only)
   const [tool,      setTool]      = useState<Tool>('erase')
   const [brushSize, setBrushSize] = useState(30)
+  const [blurSize,  setBlurSize]  = useState(0)
   const [backdrop,  setBackdrop]  = useState<Backdrop>('check')
   const [ready,     setReady]     = useState(false)
   const [loadErr,   setLoadErr]   = useState('')
@@ -283,14 +285,18 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
     const r = (brushRef.current / 2) / zoomRef.current
     const g = maskCtx.createRadialGradient(imgX, imgY, 0, imgX, imgY, r)
 
+    // hardStop: fraction of radius that stays fully opaque before feathering begins.
+    // blur=0 → hardStop=0.97 (crisp edge), blur=100 → hardStop=0 (full gradient).
+    const hardStop = (1 - blurRef.current / 100) * 0.97
+
     if (modeRef.current === 'restore') {
-      // source-over with white: increases alpha toward 255 (reveal original pixels)
       g.addColorStop(0, 'rgba(255,255,255,1)')
+      if (hardStop > 0) g.addColorStop(hardStop, 'rgba(255,255,255,1)')
       g.addColorStop(1, 'rgba(255,255,255,0)')
       maskCtx.globalCompositeOperation = 'source-over'
     } else {
-      // destination-out: decreases alpha toward 0 (erase pixels)
       g.addColorStop(0, 'rgba(0,0,0,1)')
+      if (hardStop > 0) g.addColorStop(hardStop, 'rgba(0,0,0,1)')
       g.addColorStop(1, 'rgba(0,0,0,0)')
       maskCtx.globalCompositeOperation = 'destination-out'
     }
@@ -357,6 +363,7 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
   // ── Tool / brush helpers ──────────────────────────────────────────────
   function changeTool(t: Tool) { modeRef.current = t; setTool(t) }
   function changeBrush(v: number) { brushRef.current = v; setBrushSize(v) }
+  function changeBlur(v: number) { blurRef.current = v; setBlurSize(v) }
 
   // ── Render ────────────────────────────────────────────────────────────
   const btnTool = (t: Tool, label: string, key: string) => (
@@ -444,6 +451,17 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
               className="w-20 accent-stone-700"
             />
             <span className="text-xs text-stone-500 w-6 tabular-nums">{brushSize}</span>
+          </div>
+
+          {/* Blur */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-stone-400">Blur</span>
+            <input
+              type="range" min={0} max={100} value={blurSize}
+              onChange={e => changeBlur(Number(e.target.value))}
+              className="w-20 accent-stone-700"
+            />
+            <span className="text-xs text-stone-500 w-6 tabular-nums">{blurSize}</span>
           </div>
 
           <div className="w-px h-4 bg-stone-200 mx-1 shrink-0" />
