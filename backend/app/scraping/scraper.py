@@ -134,6 +134,12 @@ GALLERY_CLASS_RE = re.compile(
     re.I,
 )
 _SIZE_SUFFIX_RE = re.compile(r'-[jmso]\.(jpg|jpeg|png|webp)$', re.I)
+_IMG_SKIP_RE = re.compile(
+    r'swatch|icon|logo|badge|sprite|assembly|protection|plan|service|warranty|'
+    r'video|play.btn|verified|certified|star.rating|checkmark|sparkle|'
+    r'wayfair.assembly|wayfair.protection|ai.feature|guarantee',
+    re.I,
+)
 
 
 def _upgrade_image_size(url: str) -> str:
@@ -164,7 +170,7 @@ def _find_images(soup: BeautifulSoup, jsonld: dict) -> list[str]:
     seen: set[str] = set()
 
     def _add(url: str) -> None:
-        if url.startswith("http") and url not in seen:
+        if url.startswith("http") and url not in seen and not _IMG_SKIP_RE.search(url):
             seen.add(url)
             imgs.append(url)
 
