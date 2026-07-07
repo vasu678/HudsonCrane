@@ -148,7 +148,9 @@ def _find_gallery_images(soup: BeautifulSoup) -> list[str]:
             src = str(img.get("src", ""))
             if not src.startswith("http"):
                 continue
-            if any(x in src.lower() for x in ["swatch", "icon", "logo", "badge", "sprite"]):
+            if any(x in src.lower() for x in ["swatch", "icon", "logo", "badge", "sprite",
+                                                   "assembly", "protection", "plan", "service",
+                                                   "warranty", "video", "play-btn"]):
                 continue
             src = _upgrade_image_size(src)
             if src not in seen:
@@ -201,14 +203,27 @@ def _find_description(soup: BeautifulSoup, jsonld: dict) -> str:
     return text
 
 
+_NAME_JUNK_RE = re.compile(
+    r'\s*[|&\-–]\s*(Reviews?|Wayfair|Pottery\s*Barn|Williams[\s-]Sonoma|'
+    r'West\s*Elm|Amazon\.com|Home\s*Depot|IKEA|Target|Crate\s*(&|and)\s*Barrel|'
+    r'Anthropologie|CB2|Restoration\s*Hardware|RH).*$',
+    re.I,
+)
+
+
+def _clean_name(raw: str) -> str:
+    return _NAME_JUNK_RE.sub("", html_module.unescape(raw)).strip()
+
+
 def _find_name(soup: BeautifulSoup, jsonld: dict) -> str:
     name = jsonld.get("name", "")
     if name:
-        return html_module.unescape(str(name)).strip()
+        return _clean_name(str(name))
     og = soup.find("meta", property="og:title")
     if og and og.get("content"):
-        return html_module.unescape(str(og["content"])).strip()
-    return (soup.title.string or "").strip() if soup.title else ""
+        return _clean_name(str(og["content"]))
+    raw = (soup.title.string or "").strip() if soup.title else ""
+    return _clean_name(raw)
 
 
 def _wb_initial_state_blob(soup: BeautifulSoup) -> str:
@@ -242,6 +257,16 @@ def _find_images_from_state(soup: BeautifulSoup) -> list[str]:
         url = f"{base}{m.group(1)}l.jpg"
         imgs.append(url)
     return imgs
+
+
+def _compact_dimensions(text: str) -> str:
+    """Shorten verbose 'Overall Height from Top to Bottom: 35'' H | ...' to 'W 31" x D 22" x H 35"'."""
+    h = re.search(r'height[^:|\d]{0,40}[:\s]+(\d+[\.\d]*)\s*["″\']', text, re.I)
+    d = re.search(r'depth[^:|\d]{0,40}[:\s]+(\d+[\.\d]*)\s*["″\']', text, re.I)
+    w = re.search(r'width[^:|\d]{0,40}[:\s]+(\d+[\.\d]*)\s*["″\']', text, re.I)
+    if h and d and w:
+        return f'W {w.group(1)}" x D {d.group(1)}" x H {h.group(1)}"'
+    return text
 
 
 def _find_dimensions_from_state(soup: BeautifulSoup) -> str:
@@ -284,7 +309,7 @@ def _find_description_from_state(soup: BeautifulSoup) -> str:
 def _parse(html: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     jsonld = _find_product_jsonld(soup)
-    dimensions = _find_dimensions(soup) or _find_dimensions_from_state(soup)
+    dimensions = _compact_dimensions(_find_dimensions(soup) or _find_dimensions_from_state(soup))
     description = _find_description(soup, jsonld) or _find_description_from_state(soup)
     return {
         "name": _find_name(soup, jsonld),
