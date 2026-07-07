@@ -162,6 +162,15 @@ function extractProductData() {
   }
 
   // ── Description ─────────────────────────────────────────────────────────
+  function truncate(text, max = 300) {
+    if (text.length <= max) return text;
+    const cut = text.substring(0, max);
+    const lastSentence = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('!'), cut.lastIndexOf('?'));
+    if (lastSentence > max * 0.5) return cut.substring(0, lastSentence + 1).trim();
+    const lastSpace = cut.lastIndexOf(' ');
+    return (lastSpace > 0 ? cut.substring(0, lastSpace) : cut).trim();
+  }
+
   function getDescription() {
     for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
@@ -170,15 +179,15 @@ function extractProductData() {
         for (const item of items) {
           if ((item['@type'] === 'Product' || String(item['@type']).includes('Product')) && item.description) {
             const text = item.description.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim();
-            if (text.length > 20) return text.substring(0, 250);
+            if (text.length > 20) return truncate(text);
           }
         }
       } catch (_) {}
     }
     const og = document.querySelector('meta[property="og:description"]') || document.querySelector('meta[name="description"]');
-    if (og?.content && og.content.length > 20) return og.content.trim().substring(0, 250);
+    if (og?.content && og.content.length > 20) return truncate(og.content.trim());
     const desc = document.querySelector('[itemprop="description"]');
-    if (desc?.innerText?.trim()) return desc.innerText.trim().substring(0, 250);
+    if (desc?.innerText?.trim()) return truncate(desc.innerText.trim());
     return '';
   }
 
