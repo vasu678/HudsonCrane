@@ -184,23 +184,38 @@ function extractProductData() {
 
   // ── Dimensions ──────────────────────────────────────────────────────────
   function getDimensions() {
+    // Use textContent (includes hidden/collapsed accordion text) + innerText (visible)
     const pageText = document.body.innerText;
+    const fullText = document.body.textContent;
 
-    // Patterns for inline dimension strings like "82" W x 90" D x 57" H"
+    // Check "Overall: ..." label first — most reliable on sites like Pottery Barn
+    const overallMatch = fullText.match(/overall\s*[:\-]\s*([^\n\r]{5,80})/i);
+    if (overallMatch) {
+      const val = overallMatch[1].replace(/\s+/g, ' ').trim();
+      if (/\d/.test(val) && val.length < 80) return val;
+    }
+
+    // Patterns for inline dimension strings
     const patterns = [
-      // NN" W x NN" D x NN" H  (or L instead of W)
+      // W NN" x D NN" x H NN"  (letter-first — Pottery Barn style)
+      /([wWlL]\s*\d{1,3}(?:\.\d{1,2})?\s*(?:"|in\.?|inches?)?\s*[x×]\s*[dD]\s*\d{1,3}(?:\.\d{1,2})?\s*(?:"|in\.?|inches?)?\s*[x×]\s*[hH]\s*\d{1,3}(?:\.\d{1,2})?\s*(?:"|in\.?|inches?)?)/,
+      // NN" W x NN" D x NN" H  (digit-first)
       /(?:(?:king|queen|twin|full|cal(?:ifornia)? king|overall)\s*:?\s*)?(\d{1,3}(?:\.\d{1,2})?\s*(?:"|in\.?|inches?)?\s*[wWlL]\.?\s*[x×]\s*\d{1,3}(?:\.\d{1,2})?\s*(?:"|in\.?|inches?)?\s*[dD]\.?\s*[x×]\s*\d{1,3}(?:\.\d{1,2})?\s*(?:"|in\.?|inches?)?\s*[hH]\.?)/,
       // NN"W x NN"D x NN"H  (compact no space)
       /(\d{1,3}(?:\.\d{1,2})?"[wWlL]\s*[x×]\s*\d{1,3}(?:\.\d{1,2})?"[dD]\s*[x×]\s*\d{1,3}(?:\.\d{1,2})?"[hH])/,
     ];
 
+    // Search both visible and full (hidden) text
+    const searchTargets = [pageText, fullText];
+
     const productMatches = [];
     const otherMatches = [];
 
     for (const pat of patterns) {
+      for (const text of searchTargets) {
       const g = new RegExp(pat.source, 'gi');
       let m;
-      while ((m = g.exec(pageText)) !== null) {
+      while ((m = g.exec(text)) !== null) {
         const clean = m[0].replace(/\s+/g, ' ').trim();
         // Must not contain weight units
         if (/\blbs?\b|\bkg\b/i.test(clean)) continue;
@@ -218,6 +233,7 @@ function extractProductData() {
           if (!otherMatches.includes(clean)) otherMatches.push(clean);
         }
       }
+      } // end searchTargets loop
     }
 
     const all = [...productMatches, ...otherMatches];
