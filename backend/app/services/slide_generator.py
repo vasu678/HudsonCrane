@@ -23,11 +23,11 @@ MAX_SUPPORTS = 5
 
 _DROP_SHADOW = {
     "type": "OUTER",
-    "transform": {"scaleX": 1, "scaleY": 1, "translateX": 3, "translateY": 3, "unit": "PT"},
+    "transform": {"scaleX": 1, "scaleY": 1, "translateX": 6, "translateY": 6, "unit": "PT"},
     "alignment": "BOTTOM_LEFT",
-    "blurRadius": {"magnitude": 3, "unit": "PT"},
+    "blurRadius": {"magnitude": 6, "unit": "PT"},
     "color": {"rgbColor": {"red": 0.0, "green": 0.0, "blue": 0.0}},
-    "alpha": 0.3,
+    "alpha": 0.5,
     "rotateWithShape": False,
     "propertyState": "RENDERED",
 }
