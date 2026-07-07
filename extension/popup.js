@@ -81,7 +81,7 @@ function extractProductData() {
     const imgs = [];
 
     // Simple URL blacklist — only patterns that are definitively NOT product photos
-    const BAD_URL = /\/swatches?\/|swatch-|icon-|\bsprite\b|placeholder|blank\.(gif|png)|pixel\.(gif|png)|tracking-pixel|qr[-_]?code|barcode|augmented[-_]?reality|view-in-room|marxent|cylindo|threekit|allaway|spin-?360|\.svg(\?|$)/i;
+    const BAD_URL = /\/swatches?\/|swatch-|icon-|\bsprite\b|placeholder|blank\.(gif|png)|pixel\.(gif|png)|tracking-pixel|qr[-_]?code|barcode|augmented[-_]?reality|view-in-room|marxent|cylindo|threekit|allaway|spin-?360|\.svg(\?|$)|badge|verified|certified|sparkle|guarantee|assembly|protection|warranty|trust[\-_]|star[\-_]rating|play[\-_]btn/i;
 
     function addImg(src) {
       if (!src) return;
