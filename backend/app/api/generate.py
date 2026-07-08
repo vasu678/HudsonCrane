@@ -35,7 +35,7 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
     })
 
     try:
-        deck_url = generate_slide(
+        result = generate_slide(
             product_ready,
             settings.template_presentation_id,
             settings.template_slide_id,
@@ -44,7 +44,11 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Slide generation failed: {e}")
 
-    return GenerateResponse(deck_url=deck_url)
+    return GenerateResponse(
+        deck_url=result.deck_url,
+        slide_id=result.slide_id,
+        thumbnail_url=result.thumbnail_url,
+    )
 
 
 @router.post("/api/generate-two", response_model=GenerateResponse)
@@ -65,7 +69,7 @@ async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
     )
 
     try:
-        deck_url = generate_two_slide(
+        result = generate_two_slide(
             two_product_ready,
             settings.template_presentation_id,
             settings.two_product_template_slide_id,
@@ -74,4 +78,8 @@ async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Two-product slide generation failed: {e}")
 
-    return GenerateResponse(deck_url=deck_url)
+    return GenerateResponse(
+        deck_url=result.deck_url,
+        slide_id=result.slide_id,
+        thumbnail_url=result.thumbnail_url,
+    )

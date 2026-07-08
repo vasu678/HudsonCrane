@@ -14,6 +14,8 @@ class ScrapeResponse(BaseModel):
 
 class GenerateResponse(BaseModel):
     deck_url: str
+    slide_id: str = ""
+    thumbnail_url: str = ""
 
 
 class ProcessHeroResponse(BaseModel):
