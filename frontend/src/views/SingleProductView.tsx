@@ -290,7 +290,7 @@ export default function SingleProductView() {
               <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
               <div className="flex items-center gap-4 py-1">
                 {generatedHeroUrl && (
-                  <div className="w-16 h-16 shrink-0 rounded-lg bg-stone-100 flex items-center justify-center p-2">
+                  <div className="w-28 h-28 shrink-0 rounded-lg bg-stone-100 flex items-center justify-center p-2">
                     <img
                       src={generatedHeroUrl}
                       alt="Shadow preview"
