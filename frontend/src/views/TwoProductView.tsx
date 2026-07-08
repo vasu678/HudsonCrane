@@ -7,6 +7,10 @@ export default function TwoProductView() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [deckUrl, setDeckUrl] = useState('')
+  const [slideId, setSlideId] = useState('')
+  const [thumbnailUrl, setThumbnailUrl] = useState('')
+  const [regenDisabled, setRegenDisabled] = useState(false)
+  const [dropShadow, setDropShadow] = useState(true)
 
   const [urlA, setUrlA] = useState('')
   const [urlB, setUrlB] = useState('')
@@ -18,16 +22,9 @@ export default function TwoProductView() {
   const [nameB, setNameB] = useState(''); const [dimsB, setDimsB] = useState(''); const [descB, setDescB] = useState('')
   const [brokenA, setBrokenA] = useState<BrokenSet>(new Set())
   const [brokenB, setBrokenB] = useState<BrokenSet>(new Set())
-  const [dropShadow, setDropShadow] = useState(true)
 
-  const displayedA = scrapedA
-    ? scrapedA.images.slice(0, 12).filter(img => !brokenA.has(img)).slice(0, 4)
-    : []
-  const displayedB = scrapedB
-    ? scrapedB.images.slice(0, 12).filter(img => !brokenB.has(img)).slice(0, 4)
-    : []
-
-  // ── Handlers ────────────────────────────────────────────────────────────
+  const displayedA = scrapedA ? scrapedA.images.slice(0, 12).filter(img => !brokenA.has(img)).slice(0, 4) : []
+  const displayedB = scrapedB ? scrapedB.images.slice(0, 12).filter(img => !brokenB.has(img)).slice(0, 4) : []
 
   async function handleScrapeTwo() {
     setError(''); setLoading(true)
@@ -45,12 +42,10 @@ export default function TwoProductView() {
       setStep('review')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  async function handleGenerateTwo() {
+  async function handleGenerateTwo(prevSlideId?: string) {
     if (!scrapedA || !scrapedB) return
     setStep('generating'); setError('')
     try {
@@ -61,123 +56,141 @@ export default function TwoProductView() {
           product_a: { hero_image_url: displayedA[heroIndexA], name: nameA, dimensions: dimsA, description: descA },
           product_b: { hero_image_url: displayedB[heroIndexB], name: nameB, dimensions: dimsB, description: descB },
           drop_shadow: dropShadow,
+          ...(prevSlideId ? { prev_slide_id: prevSlideId } : {}),
         }),
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
       const data = await res.json()
-      setDeckUrl(data.deck_url); setStep('done')
+      setDeckUrl(data.deck_url); setSlideId(data.slide_id || ''); setThumbnailUrl(data.thumbnail_url || '')
+      setStep('preview')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e)); setStep('review')
+      setError(e instanceof Error ? e.message : String(e))
+      setStep(prevSlideId ? 'preview' : 'review')
     }
+  }
+
+  async function handleRegenerate() {
+    setRegenDisabled(true)
+    await handleGenerateTwo(slideId)
+    setRegenDisabled(false)
+  }
+
+  function handleKeep() { setStep('done') }
+
+  async function handleDiscard() {
+    if (slideId) {
+      try {
+        await fetch('/api/delete-slide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slide_id: slideId }) })
+      } catch { /* non-fatal */ }
+    }
+    handleReset()
   }
 
   function handleReset() {
     setStep('input'); setUrlA(''); setUrlB(''); setScrapedA(null); setScrapedB(null)
-    setDeckUrl(''); setError('')
+    setDeckUrl(''); setError(''); setSlideId(''); setThumbnailUrl(''); setRegenDisabled(false)
     setBrokenA(new Set()); setBrokenB(new Set())
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  const showReview = scrapedA && scrapedB && (step === 'review' || (step === 'generating' && !thumbnailUrl))
+  const showPreview = step === 'preview' || step === 'done' || (step === 'generating' && !!thumbnailUrl)
 
   return (
     <>
-      {/* Step 1 — URL inputs */}
       <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-4">
         <h2 className="font-medium text-stone-700">1. Paste two vendor product URLs</h2>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-stone-500 mb-1">Product A URL</label>
-            <input
-              className="w-full border border-stone-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
-              placeholder="https://www.potterybarn.com/products/..."
-              value={urlA} onChange={e => setUrlA(e.target.value)} disabled={loading}
-            />
+            <input className="w-full border border-stone-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+              placeholder="https://www.potterybarn.com/products/..." value={urlA} onChange={e => setUrlA(e.target.value)} disabled={loading} />
           </div>
           <div>
             <label className="block text-xs font-medium text-stone-500 mb-1">Product B URL</label>
-            <input
-              className="w-full border border-stone-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
-              placeholder="https://www.potterybarn.com/products/..."
-              value={urlB} onChange={e => setUrlB(e.target.value)} disabled={loading}
-            />
+            <input className="w-full border border-stone-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
+              placeholder="https://www.potterybarn.com/products/..." value={urlB} onChange={e => setUrlB(e.target.value)} disabled={loading} />
           </div>
         </div>
-        <button
-          onClick={handleScrapeTwo}
-          disabled={!urlA.trim() || !urlB.trim() || loading}
-          className="bg-stone-800 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
-        >
+        <button onClick={handleScrapeTwo} disabled={!urlA.trim() || !urlB.trim() || loading}
+          className="bg-stone-800 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors">
           {loading ? 'Scraping…' : 'Scrape Both'}
         </button>
         {error && <p className="text-red-500 text-sm">{error}</p>}
       </section>
 
-      {/* Step 2 — Review */}
-      {(step === 'review' || step === 'generating' || step === 'done') && scrapedA && scrapedB && (
+      {showReview && (
         <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-6">
           <h2 className="font-medium text-stone-700">2. Select hero images &amp; review text</h2>
           <div className="flex gap-6">
-            <ProductPanel
-              label="Product A"
-              heroIdx={heroIndexA} setHeroIdx={setHeroIndexA}
-              brokenSet={brokenA} setBrokenSet={setBrokenA}
-              displayedImgs={displayedA}
-              nameVal={nameA} setNameVal={setNameA}
-              dimsVal={dimsA} setDimsVal={setDimsA}
-              descVal={descA} setDescVal={setDescA}
-            />
+            <ProductPanel label="Product A" heroIdx={heroIndexA} setHeroIdx={setHeroIndexA}
+              brokenSet={brokenA} setBrokenSet={setBrokenA} displayedImgs={displayedA}
+              nameVal={nameA} setNameVal={setNameA} dimsVal={dimsA} setDimsVal={setDimsA} descVal={descA} setDescVal={setDescA} />
             <div className="w-px bg-stone-200 self-stretch" />
-            <ProductPanel
-              label="Product B"
-              heroIdx={heroIndexB} setHeroIdx={setHeroIndexB}
-              brokenSet={brokenB} setBrokenSet={setBrokenB}
-              displayedImgs={displayedB}
-              nameVal={nameB} setNameVal={setNameB}
-              dimsVal={dimsB} setDimsVal={setDimsB}
-              descVal={descB} setDescVal={setDescB}
-            />
+            <ProductPanel label="Product B" heroIdx={heroIndexB} setHeroIdx={setHeroIndexB}
+              brokenSet={brokenB} setBrokenSet={setBrokenB} displayedImgs={displayedB}
+              nameVal={nameB} setNameVal={setNameB} dimsVal={dimsB} setDimsVal={setDimsB} descVal={descB} setDescVal={setDescB} />
           </div>
           <div className="flex items-center gap-2">
-            <input
-              id="drop-shadow-two"
-              type="checkbox"
-              checked={dropShadow}
-              onChange={e => setDropShadow(e.target.checked)}
-              className="w-4 h-4 accent-stone-700"
-            />
-            <label htmlFor="drop-shadow-two" className="text-sm text-stone-600 select-none cursor-pointer">
-              Drop shadows on images
-            </label>
+            <input id="drop-shadow-two" type="checkbox" checked={dropShadow} onChange={e => setDropShadow(e.target.checked)} className="w-4 h-4 accent-stone-700" />
+            <label htmlFor="drop-shadow-two" className="text-sm text-stone-600 select-none cursor-pointer">Drop shadows on images</label>
           </div>
-          <button
-            onClick={handleGenerateTwo}
-            disabled={step === 'generating' || step === 'done'}
-            className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
-          >
-            {step === 'generating' ? 'Generating… (removing backgrounds, creating slide)' : 'Generate Two-Product Slide'}
+          <button onClick={() => handleGenerateTwo()} disabled={step === 'generating'}
+            className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors">
+            {step === 'generating' ? 'Generating preview… (removing backgrounds + creating slide, ~30s)' : 'Generate Two-Product Slide'}
           </button>
         </section>
       )}
 
-      {/* Step 3 — Done */}
-      {step === 'done' && deckUrl && (
-        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 space-y-3">
-          <h2 className="font-medium text-emerald-800">Slide generated!</h2>
-          <p className="text-sm text-emerald-700">
-            Open the deck, copy the new slide, and paste it into your working presentation.
-            Every element is individually editable.
-          </p>
-          <div className="flex gap-3 flex-wrap">
-            <a
-              href={deckUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-            >
-              Open in Google Slides →
-            </a>
-            <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">
-              Start over
-            </button>
+      {showPreview && (
+        <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-5">
+          <h2 className="font-medium text-stone-700">3. Preview</h2>
+          <div className="relative rounded-lg overflow-hidden border border-stone-200 shadow-sm bg-stone-100 min-h-[160px]">
+            {thumbnailUrl && (
+              <img src={thumbnailUrl} alt="Slide preview"
+                className={`w-full transition-opacity duration-300 ${step === 'generating' ? 'opacity-25' : 'opacity-100'}`} />
+            )}
+            {step === 'generating' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <div className="w-8 h-8 border-4 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+                <p className="text-sm text-stone-600 font-medium">Generating new preview…</p>
+              </div>
+            )}
           </div>
+
+          {step === 'preview' && (
+            <>
+              <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
+                  Keep — looks good ✓
+                </button>
+                <button onClick={handleRegenerate} disabled={regenDisabled}
+                  className="border border-stone-300 text-stone-700 text-sm font-medium px-5 py-2 rounded-lg hover:border-stone-600 hover:text-stone-900 disabled:opacity-40 transition-colors">
+                  Regenerate
+                </button>
+                <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-stone-500 hover:text-stone-700 underline">
+                  Open in Google Slides →
+                </a>
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <button onClick={handleDiscard} className="text-xs text-stone-400 hover:text-stone-600 underline block">
+                Start over (discards this slide)
+              </button>
+            </>
+          )}
+
+          {step === 'done' && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+              <p className="text-sm font-medium text-emerald-800">Slide kept!</p>
+              <p className="text-sm text-emerald-700">Open the deck, copy this slide, and paste it into your working presentation. Every element is individually editable.</p>
+              <div className="flex gap-3 flex-wrap">
+                <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
+                  Open in Google Slides →
+                </a>
+                <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">Start over</button>
+              </div>
+            </div>
+          )}
         </section>
       )}
     </>

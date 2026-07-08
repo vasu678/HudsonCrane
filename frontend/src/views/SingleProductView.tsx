@@ -7,6 +7,9 @@ export default function SingleProductView() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [deckUrl, setDeckUrl] = useState('')
+  const [slideId, setSlideId] = useState('')
+  const [thumbnailUrl, setThumbnailUrl] = useState('')
+  const [regenDisabled, setRegenDisabled] = useState(false)
 
   const [url, setUrl] = useState('')
   const [scraped, setScraped] = useState<ScrapeResult | null>(null)
@@ -24,7 +27,6 @@ export default function SingleProductView() {
   const [finalizingHero, setFinalizingHero] = useState(false)
   const [finalHeroUrl, setFinalHeroUrl] = useState('')
 
-  // ── Extension handoff: read ext_data from URL params ─────────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const extData = params.get('ext_data')
@@ -36,17 +38,11 @@ export default function SingleProductView() {
       setDimensions(decoded.dimensions || '')
       setDescription(decoded.description || '')
       if (decoded.source_url) setUrl(decoded.source_url)
-      setHeroIndex(0)
-      setSupportingIndices([])
-      setBroken(new Set())
-      setProcessedHeroUrl('')
-      setFinalHeroUrl('')
-      setEditingHero(false)
-      setFinalizingHero(false)
+      setHeroIndex(0); setSupportingIndices([]); setBroken(new Set())
+      setProcessedHeroUrl(''); setFinalHeroUrl(''); setEditingHero(false); setFinalizingHero(false)
       setStep('review')
-      // Clean the URL so reloading doesn't re-trigger this
       window.history.replaceState({}, '', window.location.pathname)
-    } catch (e) {
+    } catch {
       setError('Failed to read data from the Chrome extension. Please try again.')
     }
   }, [])
@@ -55,16 +51,12 @@ export default function SingleProductView() {
     ? scraped.images.slice(0, 12).filter(img => !broken.has(img)).slice(0, 8)
     : []
 
-  // ── Handlers ────────────────────────────────────────────────────────────
+  const MAX_SUPPORTS = 5
 
   function setHero(i: number) {
     setSupportingIndices(prev => prev.filter(idx => idx !== i))
-    setHeroIndex(i)
-    setProcessedHeroUrl('')
-    setFinalHeroUrl('')
+    setHeroIndex(i); setProcessedHeroUrl(''); setFinalHeroUrl('')
   }
-
-  const MAX_SUPPORTS = 5
 
   function toggleSupporting(i: number, e: React.MouseEvent) {
     e.stopPropagation()
@@ -77,14 +69,9 @@ export default function SingleProductView() {
   }
 
   async function handleScrape() {
-    setError('')
-    setLoading(true)
+    setError(''); setLoading(true)
     try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
+      const res = await fetch('/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Scrape failed') }
       const data: ScrapeResult = await res.json()
       setScraped(data); setName(data.name); setDimensions(data.dimensions); setDescription(data.description)
@@ -93,12 +80,10 @@ export default function SingleProductView() {
       setStep('review')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(prevSlideId?: string) {
     if (!scraped) return
     setStep('generating'); setError('')
     try {
@@ -108,17 +93,36 @@ export default function SingleProductView() {
         body: JSON.stringify({
           hero_image_url: displayedImages[heroIndex],
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
-          name, dimensions, description,
-          drop_shadow: dropShadow,
+          name, dimensions, description, drop_shadow: dropShadow,
           ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
+          ...(prevSlideId ? { prev_slide_id: prevSlideId } : {}),
         }),
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
       const data = await res.json()
-      setDeckUrl(data.deck_url); setStep('done')
+      setDeckUrl(data.deck_url); setSlideId(data.slide_id || ''); setThumbnailUrl(data.thumbnail_url || '')
+      setStep('preview')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e)); setStep('review')
+      setError(e instanceof Error ? e.message : String(e))
+      setStep(prevSlideId ? 'preview' : 'review')
     }
+  }
+
+  async function handleRegenerate() {
+    setRegenDisabled(true)
+    await handleGenerate(slideId)
+    setRegenDisabled(false)
+  }
+
+  function handleKeep() { setStep('done') }
+
+  async function handleDiscard() {
+    if (slideId) {
+      try {
+        await fetch('/api/delete-slide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slide_id: slideId }) })
+      } catch { /* non-fatal */ }
+    }
+    handleReset()
   }
 
   async function handleEditCutout() {
@@ -126,76 +130,59 @@ export default function SingleProductView() {
     if (!vendorUrl) return
     setProcessingHero(true); setError('')
     try {
-      const res = await fetch('/api/process-hero', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: vendorUrl }),
-      })
+      const res = await fetch('/api/process-hero', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: vendorUrl }) })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Processing failed') }
       const { hero_url } = await res.json()
-      setProcessedHeroUrl(hero_url)
-      setEditingHero(true)
+      setProcessedHeroUrl(hero_url); setEditingHero(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setProcessingHero(false)
-    }
+    } finally { setProcessingHero(false) }
   }
 
   async function handleMaskApply(maskDataUrl: string) {
     setEditingHero(false); setFinalizingHero(true); setError('')
     try {
-      const res = await fetch('/api/finalize-hero', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ original_url: displayedImages[heroIndex], mask_data_url: maskDataUrl }),
-      })
+      const res = await fetch('/api/finalize-hero', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ original_url: displayedImages[heroIndex], mask_data_url: maskDataUrl }) })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Finalize failed') }
       const { hero_url } = await res.json()
       setFinalHeroUrl(hero_url)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setFinalizingHero(false)
-    }
+    } finally { setFinalizingHero(false) }
   }
 
   function handleReset() {
     setStep('input'); setUrl(''); setScraped(null); setDeckUrl(''); setError('')
+    setSlideId(''); setThumbnailUrl(''); setRegenDisabled(false)
     setBroken(new Set()); setSupportingIndices([])
     setProcessedHeroUrl(''); setEditingHero(false); setProcessingHero(false)
     setFinalHeroUrl(''); setFinalizingHero(false)
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  const showReview = scraped && (step === 'review' || (step === 'generating' && !thumbnailUrl))
+  const showPreview = step === 'preview' || step === 'done' || (step === 'generating' && !!thumbnailUrl)
 
   return (
     <>
-      {/* Step 1 — URL input */}
       <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-4">
         <h2 className="font-medium text-stone-700">1. Paste a vendor product URL</h2>
         <div className="flex gap-3">
           <input
             className="flex-1 border border-stone-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400"
             placeholder="https://www.potterybarn.com/products/..."
-            value={url}
-            onChange={e => setUrl(e.target.value)}
+            value={url} onChange={e => setUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !loading && handleScrape()}
             disabled={loading}
           />
-          <button
-            onClick={handleScrape}
-            disabled={!url.trim() || loading}
-            className="bg-stone-800 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
-          >
+          <button onClick={handleScrape} disabled={!url.trim() || loading}
+            className="bg-stone-800 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors">
             {loading ? 'Scraping…' : 'Scrape'}
           </button>
         </div>
         {error && <p className="text-red-500 text-sm">{error}</p>}
       </section>
 
-      {/* Step 2 — Review */}
-      {(step === 'review' || step === 'generating' || step === 'done') && scraped && (
+      {showReview && (
         <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-6">
           <h2 className="font-medium text-stone-700">2. Select images &amp; review text</h2>
           <div>
@@ -210,35 +197,25 @@ export default function SingleProductView() {
                 const isSupporting = supportRank !== -1
                 const canAdd = !isHero && !isSupporting && supportingIndices.length < MAX_SUPPORTS
                 return (
-                  <button
-                    key={img}
-                    onClick={() => setHero(i)}
+                  <button key={img} onClick={() => setHero(i)}
                     className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-square ${
                       isHero ? 'border-stone-800 ring-2 ring-stone-300'
                       : isSupporting ? 'border-emerald-500 ring-2 ring-emerald-200'
-                      : 'border-stone-200 hover:border-stone-400'
-                    }`}
-                  >
-                    <img
-                      src={img} alt={`Product image ${i + 1}`} className="w-full h-full object-cover"
+                      : 'border-stone-200 hover:border-stone-400'}`}>
+                    <img src={img} alt={`Product image ${i + 1}`} className="w-full h-full object-cover"
                       onError={() => {
                         setBroken(prev => new Set(prev).add(img))
                         if (heroIndex === i) setHeroIndex(0)
                         setSupportingIndices(prev => prev.filter(idx => idx !== i))
-                      }}
-                    />
+                      }} />
                     {isHero && <span className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-stone-800 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap">Hero</span>}
                     {isSupporting && <span className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap">Support {supportRank + 1}</span>}
                     {!isHero && (
-                      <button
-                        onClick={e => toggleSupporting(i, e)}
-                        disabled={!isSupporting && !canAdd}
+                      <button onClick={e => toggleSupporting(i, e)} disabled={!isSupporting && !canAdd}
                         className={`absolute top-1 right-1 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center transition-colors ${
                           isSupporting ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                           : canAdd ? 'bg-white/80 text-stone-600 hover:bg-white border border-stone-300'
-                          : 'bg-white/40 text-stone-400 cursor-not-allowed'
-                        }`}
-                      >
+                          : 'bg-white/40 text-stone-400 cursor-not-allowed'}`}>
                         {isSupporting ? '−' : '+'}
                       </button>
                     )}
@@ -254,25 +231,16 @@ export default function SingleProductView() {
             )}
           </div>
 
-          {/* Mask editor entry point */}
           <div className="flex items-center justify-between py-1">
             <p className="text-xs text-stone-400">
               Background removal runs on the hero.{' '}
-              {finalHeroUrl ? (
-                <span className="text-emerald-600 font-medium">Custom cutout applied.</span>
-              ) : finalizingHero ? (
-                <span className="text-stone-500">Uploading edited cutout…</span>
-              ) : processedHeroUrl ? (
-                <span className="text-stone-500">Cutout ready — edit or generate.</span>
-              ) : (
-                'Optionally inspect and touch up the cutout before generating.'
-              )}
+              {finalHeroUrl ? <span className="text-emerald-600 font-medium">Custom cutout applied.</span>
+              : finalizingHero ? <span className="text-stone-500">Uploading edited cutout…</span>
+              : processedHeroUrl ? <span className="text-stone-500">Cutout ready — edit or generate.</span>
+              : 'Optionally inspect and touch up the cutout before generating.'}
             </p>
-            <button
-              onClick={handleEditCutout}
-              disabled={processingHero || finalizingHero || step !== 'review'}
-              className="shrink-0 ml-4 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 rounded-lg hover:border-stone-600 hover:text-stone-800 disabled:opacity-40 transition-colors"
-            >
+            <button onClick={handleEditCutout} disabled={processingHero || finalizingHero || step !== 'review'}
+              className="shrink-0 ml-4 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 rounded-lg hover:border-stone-600 hover:text-stone-800 disabled:opacity-40 transition-colors">
               {processingHero ? 'Processing…' : finalizingHero ? 'Uploading…' : (processedHeroUrl || finalHeroUrl) ? 'Re-edit cutout' : 'Edit cutout'}
             </button>
           </div>
@@ -291,58 +259,74 @@ export default function SingleProductView() {
               <textarea rows={4} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none" value={description} onChange={e => setDescription(e.target.value)} />
             </div>
           </div>
+
           <div className="flex items-center gap-2">
-            <input
-              id="drop-shadow-single"
-              type="checkbox"
-              checked={dropShadow}
-              onChange={e => setDropShadow(e.target.checked)}
-              className="w-4 h-4 accent-stone-700"
-            />
-            <label htmlFor="drop-shadow-single" className="text-sm text-stone-600 select-none cursor-pointer">
-              Drop shadows on images
-            </label>
+            <input id="drop-shadow-single" type="checkbox" checked={dropShadow} onChange={e => setDropShadow(e.target.checked)} className="w-4 h-4 accent-stone-700" />
+            <label htmlFor="drop-shadow-single" className="text-sm text-stone-600 select-none cursor-pointer">Drop shadows on images</label>
           </div>
-          <button
-            onClick={handleGenerate}
-            disabled={step === 'generating' || step === 'done'}
-            className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
-          >
-            {step === 'generating' ? 'Generating… (removing background, creating slide)' : 'Generate Slide'}
+
+          <button onClick={() => handleGenerate()} disabled={step === 'generating'}
+            className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors">
+            {step === 'generating' ? 'Generating preview… (background removal + slide creation, ~30s)' : 'Generate Slide'}
           </button>
         </section>
       )}
 
-      {/* Step 3 — Done */}
-      {step === 'done' && deckUrl && (
-        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 space-y-3">
-          <h2 className="font-medium text-emerald-800">Slide generated!</h2>
-          <p className="text-sm text-emerald-700">
-            Open the deck, copy the new slide, and paste it into your working presentation.
-            Every element is individually editable.
-          </p>
-          <div className="flex gap-3 flex-wrap">
-            <a
-              href={deckUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-            >
-              Open in Google Slides →
-            </a>
-            <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">
-              Start over
-            </button>
+      {showPreview && (
+        <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-5">
+          <h2 className="font-medium text-stone-700">3. Preview</h2>
+          <div className="relative rounded-lg overflow-hidden border border-stone-200 shadow-sm bg-stone-100 min-h-[160px]">
+            {thumbnailUrl && (
+              <img src={thumbnailUrl} alt="Slide preview"
+                className={`w-full transition-opacity duration-300 ${step === 'generating' ? 'opacity-25' : 'opacity-100'}`} />
+            )}
+            {step === 'generating' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <div className="w-8 h-8 border-4 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+                <p className="text-sm text-stone-600 font-medium">Generating new preview…</p>
+              </div>
+            )}
           </div>
+
+          {step === 'preview' && (
+            <>
+              <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
+                  Keep — looks good ✓
+                </button>
+                <button onClick={handleRegenerate} disabled={regenDisabled}
+                  className="border border-stone-300 text-stone-700 text-sm font-medium px-5 py-2 rounded-lg hover:border-stone-600 hover:text-stone-900 disabled:opacity-40 transition-colors">
+                  Regenerate
+                </button>
+                <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-stone-500 hover:text-stone-700 underline">
+                  Open in Google Slides →
+                </a>
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <button onClick={handleDiscard} className="text-xs text-stone-400 hover:text-stone-600 underline block">
+                Start over (discards this slide)
+              </button>
+            </>
+          )}
+
+          {step === 'done' && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+              <p className="text-sm font-medium text-emerald-800">Slide kept!</p>
+              <p className="text-sm text-emerald-700">Open the deck, copy this slide, and paste it into your working presentation. Every element is individually editable.</p>
+              <div className="flex gap-3 flex-wrap">
+                <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
+                  Open in Google Slides →
+                </a>
+                <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">Start over</button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
-      {/* Mask editor modal */}
       {editingHero && processedHeroUrl && (
-        <MaskEditor
-          originalUrl={displayedImages[heroIndex]}
-          rembgUrl={processedHeroUrl}
-          onApply={handleMaskApply}
-          onCancel={() => setEditingHero(false)}
-        />
+        <MaskEditor originalUrl={displayedImages[heroIndex]} rembgUrl={processedHeroUrl} onApply={handleMaskApply} onCancel={() => setEditingHero(false)} />
       )}
     </>
   )

@@ -11,6 +11,7 @@ class ProductSlideInput(BaseModel):
     description: str
     finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg
     drop_shadow: bool = True
+    prev_slide_id: str | None = None  # superseded candidate to delete after successful regen
 
 
 class ProductInput(BaseModel):
@@ -28,3 +29,4 @@ class TwoProductSlideInput(BaseModel):
     product_a: ProductInput
     product_b: ProductInput
     drop_shadow: bool = True
+    prev_slide_id: str | None = None  # superseded candidate to delete after successful regen

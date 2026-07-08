@@ -1,5 +1,7 @@
 import logging
 import pickle
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -43,6 +45,13 @@ def _shadow_req(object_id: str) -> dict:
     }
 
 
+@dataclass
+class SlideResult:
+    deck_url: str
+    slide_id: str
+    thumbnail_url: str
+
+
 def _get_credentials(client_secrets_file: str) -> Credentials:
     creds: Credentials | None = None
     if TOKEN_PATH.exists():
@@ -80,13 +89,58 @@ def _build_image_slots(
     return slots
 
 
+def _fetch_thumbnail(svc, presentation_id: str, slide_id: str) -> str:
+    """Call getThumbnail for a slide page. Retries once after a brief wait for render lag."""
+    time.sleep(1)
+    for attempt in range(2):
+        try:
+            resp = (
+                svc.presentations()
+                .pages()
+                .getThumbnail(
+                    presentationId=presentation_id,
+                    pageObjectId=slide_id,
+                    thumbnailProperties_thumbnailSize="LARGE",
+                )
+                .execute()
+            )
+            url = resp.get("contentUrl", "")
+            if url:
+                return url
+        except Exception as exc:
+            log.warning("getThumbnail attempt %d failed: %s", attempt + 1, exc)
+        if attempt == 0:
+            time.sleep(2)
+    return ""
+
+
+def delete_slide(svc, presentation_id: str, slide_id: str) -> None:
+    """Delete a single slide page from the presentation. Non-fatal on failure."""
+    try:
+        svc.presentations().batchUpdate(
+            presentationId=presentation_id,
+            body={"requests": [{"deleteObject": {"objectId": slide_id}}]},
+        ).execute()
+        log.info("Deleted superseded candidate slide %s", slide_id)
+    except Exception as exc:
+        log.warning("Failed to delete candidate slide %s: %s", slide_id, exc)
+
+
+def delete_slide_by_id(presentation_id: str, slide_id: str, client_secrets_file: str) -> None:
+    """Standalone delete — builds its own svc. Used by the /api/delete-slide endpoint."""
+    creds = _get_credentials(client_secrets_file)
+    svc = build("slides", "v1", credentials=creds)
+    delete_slide(svc, presentation_id, slide_id)
+
+
 def generate_slide(
     product: ProductSlideInput,
     template_presentation_id: str,
     template_slide_id: str,
     client_secrets_file: str,
-) -> str:
-    """Clone template slide, replace tokens + hero image. Returns deck URL."""
+    prev_slide_id: str | None = None,
+) -> SlideResult:
+    """Clone template slide, replace tokens + hero image. Returns SlideResult."""
     creds = _get_credentials(client_secrets_file)
     svc = build("slides", "v1", credentials=creds)
 
@@ -128,7 +182,11 @@ def generate_slide(
         body={"requests": requests},
     ).execute()
 
-    return f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+    thumbnail_url = _fetch_thumbnail(svc, template_presentation_id, new_slide_id)
+    if prev_slide_id:
+        delete_slide(svc, template_presentation_id, prev_slide_id)
+    deck_url = f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+    return SlideResult(deck_url=deck_url, slide_id=new_slide_id, thumbnail_url=thumbnail_url)
 
 
 def generate_two_slide(
@@ -136,8 +194,9 @@ def generate_two_slide(
     template_presentation_id: str,
     template_slide_id: str,
     client_secrets_file: str,
-) -> str:
-    """Clone two-product template slide, replace tokens + both hero images. Returns deck URL."""
+    prev_slide_id: str | None = None,
+) -> SlideResult:
+    """Clone two-product template slide, replace tokens + both hero images. Returns SlideResult."""
     creds = _get_credentials(client_secrets_file)
     svc = build("slides", "v1", credentials=creds)
 
@@ -177,4 +236,8 @@ def generate_two_slide(
         body={"requests": requests},
     ).execute()
 
-    return f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+    thumbnail_url = _fetch_thumbnail(svc, template_presentation_id, new_slide_id)
+    if prev_slide_id:
+        delete_slide(svc, template_presentation_id, prev_slide_id)
+    deck_url = f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+    return SlideResult(deck_url=deck_url, slide_id=new_slide_id, thumbnail_url=thumbnail_url)

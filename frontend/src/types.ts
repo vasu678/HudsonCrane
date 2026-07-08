@@ -1,4 +1,4 @@
-export type Step = 'input' | 'review' | 'generating' | 'done'
+export type Step = 'input' | 'review' | 'generating' | 'preview' | 'done'
 export type Mode = 'single' | 'two'
 export type BrokenSet = Set<string>
 
