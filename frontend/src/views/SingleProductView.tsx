@@ -260,21 +260,6 @@ export default function SingleProductView() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-stone-600">Shadow intensity</label>
-              <span className="text-xs font-mono text-stone-400 w-8 text-right">
-                {shadowIntensity === 0 ? 'Off' : `${shadowIntensity}%`}
-              </span>
-            </div>
-            <input type="range" min={0} max={100} step={5} value={shadowIntensity}
-              onChange={e => setShadowIntensity(Number(e.target.value))}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
-            <div className="flex justify-between text-[10px] text-stone-400">
-              <span>None</span><span>Max</span>
-            </div>
-          </div>
-
           <button onClick={() => handleGenerate()} disabled={step === 'generating'}
             className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors">
             {step === 'generating' ? 'Generating preview… (background removal + slide creation, ~30s)' : 'Generate Slide'}
@@ -302,13 +287,21 @@ export default function SingleProductView() {
             <>
               <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
               <div className="flex items-center gap-3 py-1">
+                <button
+                  onClick={() => setShadowIntensity(prev => prev > 0 ? 0 : 65)}
+                  className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${shadowIntensity > 0 ? 'bg-stone-700' : 'bg-stone-300'}`}
+                  aria-label="Toggle shadow">
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${shadowIntensity > 0 ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
                 <span className="text-xs text-stone-500 shrink-0">Shadow</span>
-                <input type="range" min={0} max={100} step={5} value={shadowIntensity}
-                  onChange={e => setShadowIntensity(Number(e.target.value))}
-                  className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
-                <span className="text-xs font-mono text-stone-400 w-8 text-right shrink-0">
-                  {shadowIntensity === 0 ? 'Off' : `${shadowIntensity}%`}
-                </span>
+                {shadowIntensity > 0 && (
+                  <>
+                    <input type="range" min={5} max={100} step={5} value={shadowIntensity}
+                      onChange={e => setShadowIntensity(Number(e.target.value))}
+                      className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
+                    <span className="text-xs font-mono text-stone-400 w-8 text-right shrink-0">{shadowIntensity}%</span>
+                  </>
+                )}
               </div>
               <div className="flex flex-wrap gap-3 items-center">
                 <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
