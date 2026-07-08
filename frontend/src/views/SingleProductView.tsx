@@ -19,7 +19,7 @@ export default function SingleProductView() {
   const [dimensions, setDimensions] = useState('')
   const [description, setDescription] = useState('')
   const [broken, setBroken] = useState<BrokenSet>(new Set())
-  const [dropShadow, setDropShadow] = useState(true)
+  const [shadowIntensity, setShadowIntensity] = useState(65)
 
   const [processingHero, setProcessingHero] = useState(false)
   const [processedHeroUrl, setProcessedHeroUrl] = useState('')
@@ -93,7 +93,7 @@ export default function SingleProductView() {
         body: JSON.stringify({
           hero_image_url: displayedImages[heroIndex],
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
-          name, dimensions, description, drop_shadow: dropShadow,
+          name, dimensions, description, shadow_intensity: shadowIntensity / 100,
           ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
           ...(prevSlideId ? { prev_slide_id: prevSlideId } : {}),
         }),
@@ -260,9 +260,19 @@ export default function SingleProductView() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input id="drop-shadow-single" type="checkbox" checked={dropShadow} onChange={e => setDropShadow(e.target.checked)} className="w-4 h-4 accent-stone-700" />
-            <label htmlFor="drop-shadow-single" className="text-sm text-stone-600 select-none cursor-pointer">Drop shadows on images</label>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-stone-600">Shadow intensity</label>
+              <span className="text-xs font-mono text-stone-400 w-8 text-right">
+                {shadowIntensity === 0 ? 'Off' : `${shadowIntensity}%`}
+              </span>
+            </div>
+            <input type="range" min={0} max={100} step={5} value={shadowIntensity}
+              onChange={e => setShadowIntensity(Number(e.target.value))}
+              className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
+            <div className="flex justify-between text-[10px] text-stone-400">
+              <span>None</span><span>Max</span>
+            </div>
           </div>
 
           <button onClick={() => handleGenerate()} disabled={step === 'generating'}
@@ -291,6 +301,15 @@ export default function SingleProductView() {
           {step === 'preview' && (
             <>
               <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
+              <div className="flex items-center gap-3 py-1">
+                <span className="text-xs text-stone-500 shrink-0">Shadow</span>
+                <input type="range" min={0} max={100} step={5} value={shadowIntensity}
+                  onChange={e => setShadowIntensity(Number(e.target.value))}
+                  className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
+                <span className="text-xs font-mono text-stone-400 w-8 text-right shrink-0">
+                  {shadowIntensity === 0 ? 'Off' : `${shadowIntensity}%`}
+                </span>
+              </div>
               <div className="flex flex-wrap gap-3 items-center">
                 <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
                   Keep — looks good ✓

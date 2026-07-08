@@ -23,24 +23,23 @@ IMAGE_REPLACE_HERO = "CENTER_INSIDE"
 IMAGE_REPLACE_SUPPORT = "CENTER_CROP"
 MAX_SUPPORTS = 5
 
-_DROP_SHADOW = {
-    "type": "OUTER",
-    "transform": {"scaleX": 1, "scaleY": 1, "translateX": 6, "translateY": 6, "unit": "PT"},
-    "alignment": "BOTTOM_LEFT",
-    "blurRadius": {"magnitude": 6, "unit": "PT"},
-    "color": {"rgbColor": {"red": 0.0, "green": 0.0, "blue": 0.0}},
-    "alpha": 0.5,
-    "rotateWithShape": False,
-    "propertyState": "RENDERED",
-}
-
-
-def _shadow_req(object_id: str) -> dict:
+def _shadow_req(object_id: str, intensity: float) -> dict:
+    """Build a drop-shadow update request scaled by intensity (0.0–1.0)."""
+    offset = round(intensity * 9, 1)
     return {
         "updateImageProperties": {
             "objectId": object_id,
             "fields": "shadow",
-            "imageProperties": {"shadow": _DROP_SHADOW},
+            "imageProperties": {"shadow": {
+                "type": "OUTER",
+                "transform": {"scaleX": 1, "scaleY": 1, "translateX": offset, "translateY": offset, "unit": "PT"},
+                "alignment": "BOTTOM_LEFT",
+                "blurRadius": {"magnitude": round(intensity * 10, 1), "unit": "PT"},
+                "color": {"rgbColor": {"red": 0.0, "green": 0.0, "blue": 0.0}},
+                "alpha": round(intensity * 0.7, 3),
+                "rotateWithShape": False,
+                "propertyState": "RENDERED",
+            }},
         }
     }
 
@@ -162,8 +161,9 @@ def generate_slide(
         {"replaceAllText": {"containsText": {"text": "{{desc}}", "matchCase": True}, "replaceText": product.description, "pageObjectIds": [new_slide_id]}},
         {"replaceImage": {"imageObjectId": image_slots["hero"], "url": product.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
     ]
-    if product.drop_shadow:
-        requests.append(_shadow_req(image_slots["hero"]))
+    si = product.shadow_intensity
+    if si > 0:
+        requests.append(_shadow_req(image_slots["hero"], si))
 
     support_urls = product.supporting_image_urls[:MAX_SUPPORTS]
     for i in range(MAX_SUPPORTS):
@@ -172,8 +172,8 @@ def generate_slide(
             continue
         if i < len(support_urls):
             requests.append({"replaceImage": {"imageObjectId": slot, "url": support_urls[i], "imageReplaceMethod": IMAGE_REPLACE_SUPPORT}})
-            if product.drop_shadow:
-                requests.append(_shadow_req(slot))
+            if si > 0:
+                requests.append(_shadow_req(slot, si))
         else:
             requests.append({"deleteObject": {"objectId": slot}})
 
@@ -227,9 +227,10 @@ def generate_two_slide(
         {"replaceImage": {"imageObjectId": image_slots["hero_a"], "url": a.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
         {"replaceImage": {"imageObjectId": image_slots["hero_b"], "url": b.hero_image_url, "imageReplaceMethod": IMAGE_REPLACE_HERO}},
     ]
-    if two_product.drop_shadow:
-        requests.append(_shadow_req(image_slots["hero_a"]))
-        requests.append(_shadow_req(image_slots["hero_b"]))
+    si = two_product.shadow_intensity
+    if si > 0:
+        requests.append(_shadow_req(image_slots["hero_a"], si))
+        requests.append(_shadow_req(image_slots["hero_b"], si))
 
     svc.presentations().batchUpdate(
         presentationId=template_presentation_id,
