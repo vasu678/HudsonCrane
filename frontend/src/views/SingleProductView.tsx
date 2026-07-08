@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import MaskEditor from '../components/MaskEditor'
 import type { BrokenSet, ScrapeResult, Step } from '../types'
 
@@ -7,6 +7,9 @@ export default function SingleProductView() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [deckUrl, setDeckUrl] = useState('')
+  const [slideId, setSlideId] = useState('')
+  const [thumbnailUrl, setThumbnailUrl] = useState('')
+  const [regenDisabled, setRegenDisabled] = useState(false)
 
   const [url, setUrl] = useState('')
   const [scraped, setScraped] = useState<ScrapeResult | null>(null)
@@ -23,9 +26,37 @@ export default function SingleProductView() {
   const [finalizingHero, setFinalizingHero] = useState(false)
   const [finalHeroUrl, setFinalHeroUrl] = useState('')
 
+  // ── Extension handoff: read ext_data from URL params ─────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const extData = params.get('ext_data')
+    if (!extData) return
+    try {
+      const decoded = JSON.parse(decodeURIComponent(atob(extData))) as ScrapeResult & { source_url?: string }
+      setScraped(decoded)
+      setName(decoded.name || '')
+      setDimensions(decoded.dimensions || '')
+      setDescription(decoded.description || '')
+      if (decoded.source_url) setUrl(decoded.source_url)
+      setHeroIndex(0)
+      setSupportingIndices([])
+      setBroken(new Set())
+      setProcessedHeroUrl('')
+      setFinalHeroUrl('')
+      setEditingHero(false)
+      setFinalizingHero(false)
+      setStep('review')
+      window.history.replaceState({}, '', window.location.pathname)
+    } catch {
+      setError('Failed to read data from the Chrome extension. Please try again.')
+    }
+  }, [])
+
   const displayedImages = scraped
     ? scraped.images.slice(0, 12).filter(img => !broken.has(img)).slice(0, 8)
     : []
+
+  const MAX_SUPPORTS = 5
 
   // ── Handlers ────────────────────────────────────────────────────────────
 
@@ -41,7 +72,7 @@ export default function SingleProductView() {
     if (i === heroIndex) return
     setSupportingIndices(prev => {
       if (prev.includes(i)) return prev.filter(idx => idx !== i)
-      if (prev.length >= 2) return prev
+      if (prev.length >= MAX_SUPPORTS) return prev
       return [...prev, i]
     })
   }
@@ -68,7 +99,8 @@ export default function SingleProductView() {
     }
   }
 
-  async function handleGenerate() {
+  // Core generate — also handles Regenerate (prevSlideId triggers cleanup server-side)
+  async function handleGenerate(prevSlideId?: string) {
     if (!scraped) return
     setStep('generating'); setError('')
     try {
@@ -80,14 +112,48 @@ export default function SingleProductView() {
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
           name, dimensions, description,
           ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
+          ...(prevSlideId ? { prev_slide_id: prevSlideId } : {}),
         }),
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
       const data = await res.json()
-      setDeckUrl(data.deck_url); setStep('done')
+      setDeckUrl(data.deck_url)
+      setSlideId(data.slide_id || '')
+      setThumbnailUrl(data.thumbnail_url || '')
+      setStep('preview')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e)); setStep('review')
+      setError(e instanceof Error ? e.message : String(e))
+      // On regen failure, stay on preview so the user still sees the previous thumbnail
+      setStep(prevSlideId ? 'preview' : 'review')
     }
+  }
+
+  // Regenerate: generate a new candidate; server deletes prevSlideId on success
+  async function handleRegenerate() {
+    setRegenDisabled(true)
+    await handleGenerate(slideId)
+    setRegenDisabled(false)
+  }
+
+  // Keep: slide is accepted — move to done, leave it in the deck
+  function handleKeep() {
+    setStep('done')
+  }
+
+  // Discard: delete the current candidate then reset the whole form
+  async function handleDiscard() {
+    if (slideId) {
+      try {
+        await fetch('/api/delete-slide', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slide_id: slideId }),
+        })
+      } catch {
+        // non-fatal
+      }
+    }
+    handleReset()
   }
 
   async function handleEditCutout() {
@@ -131,10 +197,15 @@ export default function SingleProductView() {
 
   function handleReset() {
     setStep('input'); setUrl(''); setScraped(null); setDeckUrl(''); setError('')
+    setSlideId(''); setThumbnailUrl(''); setRegenDisabled(false)
     setBroken(new Set()); setSupportingIndices([])
     setProcessedHeroUrl(''); setEditingHero(false); setProcessingHero(false)
     setFinalHeroUrl(''); setFinalizingHero(false)
   }
+
+  // Review shows during initial generate; during regen the preview section handles loading
+  const showReview = scraped && (step === 'review' || (step === 'generating' && !thumbnailUrl))
+  const showPreview = step === 'preview' || step === 'done' || (step === 'generating' && !!thumbnailUrl)
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -164,20 +235,20 @@ export default function SingleProductView() {
       </section>
 
       {/* Step 2 — Review */}
-      {(step === 'review' || step === 'generating' || step === 'done') && scraped && (
+      {showReview && (
         <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-6">
           <h2 className="font-medium text-stone-700">2. Select images &amp; review text</h2>
           <div>
             <p className="text-xs text-stone-500 mb-3">
               Click an image to set it as the <strong>hero</strong> (background removed).
-              Use <strong>+</strong> to add up to 2 <span className="text-emerald-700 font-medium">supporting</span> images (kept as-is).
+              Use <strong>+</strong> to add up to {MAX_SUPPORTS} <span className="text-emerald-700 font-medium">supporting</span> images (kept as-is).
             </p>
             <div className="grid grid-cols-4 gap-3">
               {displayedImages.map((img, i) => {
                 const isHero = heroIndex === i
                 const supportRank = supportingIndices.indexOf(i)
                 const isSupporting = supportRank !== -1
-                const canAdd = !isHero && !isSupporting && supportingIndices.length < 2
+                const canAdd = !isHero && !isSupporting && supportingIndices.length < MAX_SUPPORTS
                 return (
                   <button
                     key={img}
@@ -218,7 +289,7 @@ export default function SingleProductView() {
             {supportingIndices.length > 0 && (
               <p className="text-xs text-emerald-700 mt-2">
                 {supportingIndices.length} supporting image{supportingIndices.length > 1 ? 's' : ''} selected
-                {supportingIndices.length < 2 && ' (you can add 1 more)'}
+                {supportingIndices.length < MAX_SUPPORTS && ` (you can add up to ${MAX_SUPPORTS - supportingIndices.length} more)`}
               </p>
             )}
           </div>
@@ -260,35 +331,93 @@ export default function SingleProductView() {
               <textarea rows={4} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none" value={description} onChange={e => setDescription(e.target.value)} />
             </div>
           </div>
+
           <button
-            onClick={handleGenerate}
-            disabled={step === 'generating' || step === 'done'}
+            onClick={() => handleGenerate()}
+            disabled={step === 'generating'}
             className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
           >
-            {step === 'generating' ? 'Generating… (removing background, creating slide)' : 'Generate Slide'}
+            {step === 'generating'
+              ? 'Generating preview… (background removal + slide creation, ~30s)'
+              : 'Generate Slide'}
           </button>
         </section>
       )}
 
-      {/* Step 3 — Done */}
-      {step === 'done' && deckUrl && (
-        <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 space-y-3">
-          <h2 className="font-medium text-emerald-800">Slide generated!</h2>
-          <p className="text-sm text-emerald-700">
-            Open the deck, copy the new slide, and paste it into your working presentation.
-            Every element is individually editable.
-          </p>
-          <div className="flex gap-3 flex-wrap">
-            <a
-              href={deckUrl} target="_blank" rel="noopener noreferrer"
-              className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
-            >
-              Open in Google Slides →
-            </a>
-            <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">
-              Start over
-            </button>
+      {/* Step 3 — Preview (also shown during regenerate with old thumbnail dimmed) */}
+      {showPreview && (
+        <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-5">
+          <h2 className="font-medium text-stone-700">3. Preview</h2>
+
+          <div className="relative rounded-lg overflow-hidden border border-stone-200 shadow-sm bg-stone-100 min-h-[160px]">
+            {thumbnailUrl && (
+              <img
+                src={thumbnailUrl}
+                alt="Slide preview"
+                className={`w-full transition-opacity duration-300 ${step === 'generating' ? 'opacity-25' : 'opacity-100'}`}
+              />
+            )}
+            {step === 'generating' && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                <div className="w-8 h-8 border-4 border-stone-300 border-t-stone-700 rounded-full animate-spin" />
+                <p className="text-sm text-stone-600 font-medium">Generating new preview…</p>
+              </div>
+            )}
           </div>
+
+          {(step === 'preview') && (
+            <>
+              <p className="text-xs text-stone-400">
+                This is the actual slide — every element is individually editable in Google Slides.
+              </p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  onClick={handleKeep}
+                  className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
+                >
+                  Keep — looks good ✓
+                </button>
+                <button
+                  onClick={handleRegenerate}
+                  disabled={regenDisabled}
+                  className="border border-stone-300 text-stone-700 text-sm font-medium px-5 py-2 rounded-lg hover:border-stone-600 hover:text-stone-900 disabled:opacity-40 transition-colors"
+                >
+                  Regenerate
+                </button>
+                <a
+                  href={deckUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-stone-500 hover:text-stone-700 underline"
+                >
+                  Open in Google Slides →
+                </a>
+              </div>
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+              <button onClick={handleDiscard} className="text-xs text-stone-400 hover:text-stone-600 underline block">
+                Start over (discards this slide)
+              </button>
+            </>
+          )}
+
+          {step === 'done' && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+              <p className="text-sm font-medium text-emerald-800">Slide kept!</p>
+              <p className="text-sm text-emerald-700">
+                Open the deck, copy this slide, and paste it into your working presentation.
+                Every element is individually editable.
+              </p>
+              <div className="flex gap-3 flex-wrap">
+                <a
+                  href={deckUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors"
+                >
+                  Open in Google Slides →
+                </a>
+                <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">
+                  Start over
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

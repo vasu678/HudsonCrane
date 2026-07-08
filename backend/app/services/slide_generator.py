@@ -104,11 +104,19 @@ def delete_slide(svc, presentation_id: str, slide_id: str) -> None:
         log.warning("Failed to delete candidate slide %s: %s", slide_id, exc)
 
 
+def delete_slide_by_id(presentation_id: str, slide_id: str, client_secrets_file: str) -> None:
+    """Standalone delete — builds its own svc. Used by the /api/delete-slide endpoint."""
+    creds = _get_credentials(client_secrets_file)
+    svc = build("slides", "v1", credentials=creds)
+    delete_slide(svc, presentation_id, slide_id)
+
+
 def generate_slide(
     product: ProductSlideInput,
     template_presentation_id: str,
     template_slide_id: str,
     client_secrets_file: str,
+    prev_slide_id: str | None = None,
 ) -> SlideResult:
     """Clone template slide, replace tokens + hero image. Returns SlideResult."""
     creds = _get_credentials(client_secrets_file)
@@ -149,6 +157,8 @@ def generate_slide(
     ).execute()
 
     thumbnail_url = _fetch_thumbnail(svc, template_presentation_id, new_slide_id)
+    if prev_slide_id:
+        delete_slide(svc, template_presentation_id, prev_slide_id)
     deck_url = f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
     return SlideResult(deck_url=deck_url, slide_id=new_slide_id, thumbnail_url=thumbnail_url)
 
@@ -158,6 +168,7 @@ def generate_two_slide(
     template_presentation_id: str,
     template_slide_id: str,
     client_secrets_file: str,
+    prev_slide_id: str | None = None,
 ) -> SlideResult:
     """Clone two-product template slide, replace tokens + both hero images. Returns SlideResult."""
     creds = _get_credentials(client_secrets_file)
@@ -197,5 +208,7 @@ def generate_two_slide(
     ).execute()
 
     thumbnail_url = _fetch_thumbnail(svc, template_presentation_id, new_slide_id)
+    if prev_slide_id:
+        delete_slide(svc, template_presentation_id, prev_slide_id)
     deck_url = f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
     return SlideResult(deck_url=deck_url, slide_id=new_slide_id, thumbnail_url=thumbnail_url)

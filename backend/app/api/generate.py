@@ -3,10 +3,10 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
-from app.models.requests import GenerateResponse
+from app.models.requests import DeleteSlideRequest, GenerateResponse
 from app.models.slide import ProductSlideInput, TwoProductSlideInput
 from app.services.image_processor import process_hero, process_supporting_image
-from app.services.slide_generator import generate_slide, generate_two_slide
+from app.services.slide_generator import delete_slide_by_id, generate_slide, generate_two_slide
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,6 +40,7 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
             settings.template_presentation_id,
             settings.template_slide_id,
             settings.oauth_client_secrets_file,
+            prev_slide_id=product.prev_slide_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Slide generation failed: {e}")
@@ -74,6 +75,7 @@ async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
             settings.template_presentation_id,
             settings.two_product_template_slide_id,
             settings.oauth_client_secrets_file,
+            prev_slide_id=body.prev_slide_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Two-product slide generation failed: {e}")
@@ -83,3 +85,17 @@ async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
         slide_id=result.slide_id,
         thumbnail_url=result.thumbnail_url,
     )
+
+
+@router.post("/api/delete-slide")
+async def discard_slide(body: DeleteSlideRequest) -> dict:
+    """Delete a candidate slide the user chose not to keep."""
+    try:
+        delete_slide_by_id(
+            settings.template_presentation_id,
+            body.slide_id,
+            settings.oauth_client_secrets_file,
+        )
+    except Exception as exc:
+        log.warning("discard_slide: %s", exc)
+    return {"ok": True}

@@ -29,3 +29,7 @@ class FinalizeHeroRequest(BaseModel):
 
 class FinalizeHeroResponse(BaseModel):
     hero_url: str
+
+
+class DeleteSlideRequest(BaseModel):
+    slide_id: str

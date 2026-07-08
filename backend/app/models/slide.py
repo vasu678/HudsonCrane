@@ -10,6 +10,7 @@ class ProductSlideInput(BaseModel):
     dimensions: str  # preserve vendor's raw format — do NOT normalize
     description: str
     finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg
+    prev_slide_id: str | None = None  # superseded candidate to delete after successful regen
 
 
 class ProductInput(BaseModel):
@@ -26,3 +27,4 @@ class TwoProductSlideInput(BaseModel):
 
     product_a: ProductInput
     product_b: ProductInput
+    prev_slide_id: str | None = None  # superseded candidate to delete after successful regen
