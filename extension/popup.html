@@ -116,7 +116,8 @@
     }
 
     .btn-icon {
-      font-size: 16px;
+      display: flex;
+      align-items: center;
     }
 
     .status {
@@ -149,38 +150,6 @@
       display: block;
     }
 
-    .divider {
-      height: 1px;
-      background: #e7e5e4;
-      margin: 14px 0;
-    }
-
-    .mode-toggle {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 14px;
-    }
-
-    .mode-btn {
-      flex: 1;
-      padding: 7px 10px;
-      border: 1px solid #e7e5e4;
-      border-radius: 6px;
-      background: white;
-      font-size: 11px;
-      font-weight: 500;
-      color: #78716c;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s ease;
-    }
-
-    .mode-btn.active {
-      background: #292524;
-      color: white;
-      border-color: #292524;
-    }
-
     .footer {
       padding: 10px 16px;
       border-top: 1px solid #e7e5e4;
@@ -205,13 +174,13 @@
       <span id="currentUrl">Loading...</span>
     </div>
 
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="modeSingle" data-mode="single">Single Product</button>
-      <button class="mode-btn" id="modeTwo" data-mode="two">Two Products</button>
-    </div>
-
     <button class="btn-primary" id="sendBtn">
-      <span class="btn-icon">🎨</span>
+      <span class="btn-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </span>
       <span id="btnText">Send to Slide Generator</span>
     </button>
 

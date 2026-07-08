@@ -2,8 +2,6 @@
 // Change this to the production URL when you deploy
 const APP_URL = 'http://localhost:5173';
 
-let selectedMode = 'single'; // 'single' or 'two'
-
 // ── On load: show the current tab URL ──────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -16,20 +14,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     urlEl.textContent = 'Unknown';
   }
 
-  // Mode toggle buttons
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedMode = btn.dataset.mode;
-      const btnText = document.getElementById('btnText');
-      btnText.textContent = selectedMode === 'two'
-        ? 'Send to Slide Generator (Slot A)'
-        : 'Send to Slide Generator';
-    });
-  });
-
-  // Main action button
   document.getElementById('sendBtn').addEventListener('click', handleSend);
 });
 
@@ -57,9 +41,7 @@ async function handleSend() {
 
     const json = JSON.stringify(data);
     const encoded = btoa(encodeURIComponent(json));
-    const targetUrl = selectedMode === 'two'
-      ? `${APP_URL}/?ext_data=${encodeURIComponent(encoded)}&mode=two`
-      : `${APP_URL}/?ext_data=${encodeURIComponent(encoded)}`;
+    const targetUrl = `${APP_URL}/?ext_data=${encodeURIComponent(encoded)}`;
 
     await chrome.tabs.create({ url: targetUrl });
 
