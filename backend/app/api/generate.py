@@ -49,6 +49,7 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
         deck_url=result.deck_url,
         slide_id=result.slide_id,
         thumbnail_url=result.thumbnail_url,
+        hero_url=hero_url,
     )
 
 
@@ -84,6 +85,7 @@ async def generate_two(body: TwoProductSlideInput) -> GenerateResponse:
         deck_url=result.deck_url,
         slide_id=result.slide_id,
         thumbnail_url=result.thumbnail_url,
+        hero_url=hero_a_url,
     )
 
 

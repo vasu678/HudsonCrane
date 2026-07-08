@@ -16,6 +16,7 @@ class GenerateResponse(BaseModel):
     deck_url: str
     slide_id: str = ""
     thumbnail_url: str = ""
+    hero_url: str = ""  # bg-removed hero PNG on GCS — for client-side shadow preview
 
 
 class ProcessHeroResponse(BaseModel):

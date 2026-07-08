@@ -11,6 +11,7 @@ export default function TwoProductView() {
   const [thumbnailUrl, setThumbnailUrl] = useState('')
   const [regenDisabled, setRegenDisabled] = useState(false)
   const [shadowIntensity, setShadowIntensity] = useState(65)
+  const [generatedHeroUrl, setGeneratedHeroUrl] = useState('')
 
   const [urlA, setUrlA] = useState('')
   const [urlB, setUrlB] = useState('')
@@ -62,6 +63,7 @@ export default function TwoProductView() {
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
       const data = await res.json()
       setDeckUrl(data.deck_url); setSlideId(data.slide_id || ''); setThumbnailUrl(data.thumbnail_url || '')
+      if (data.hero_url) setGeneratedHeroUrl(data.hero_url)
       setStep('preview')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -88,7 +90,7 @@ export default function TwoProductView() {
 
   function handleReset() {
     setStep('input'); setUrlA(''); setUrlB(''); setScrapedA(null); setScrapedB(null)
-    setDeckUrl(''); setError(''); setSlideId(''); setThumbnailUrl(''); setRegenDisabled(false)
+    setDeckUrl(''); setError(''); setSlideId(''); setThumbnailUrl(''); setRegenDisabled(false); setGeneratedHeroUrl('')
     setBrokenA(new Set()); setBrokenB(new Set())
   }
 
@@ -156,22 +158,41 @@ export default function TwoProductView() {
           {step === 'preview' && (
             <>
               <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
-              <div className="flex items-center gap-3 py-1">
-                <button
-                  onClick={() => setShadowIntensity(prev => prev > 0 ? 0 : 65)}
-                  className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${shadowIntensity > 0 ? 'bg-stone-700' : 'bg-stone-300'}`}
-                  aria-label="Toggle shadow">
-                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${shadowIntensity > 0 ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
-                <span className="text-xs text-stone-500 shrink-0">Shadow</span>
-                {shadowIntensity > 0 && (
-                  <>
+              <div className="flex items-center gap-4 py-1">
+                {generatedHeroUrl && (
+                  <div className="w-16 h-16 shrink-0 rounded-lg bg-stone-100 flex items-center justify-center p-2">
+                    <img
+                      src={generatedHeroUrl}
+                      alt="Shadow preview"
+                      className="max-w-full max-h-full object-contain"
+                      style={{
+                        filter: shadowIntensity > 0
+                          ? `drop-shadow(${(shadowIntensity / 100) * 10}px ${(shadowIntensity / 100) * 10}px ${(shadowIntensity / 100) * 12}px rgba(0,0,0,${(shadowIntensity / 100) * 0.65}))`
+                          : 'none',
+                        transition: 'filter 0.1s ease',
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setShadowIntensity(prev => prev > 0 ? 0 : 65)}
+                      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${shadowIntensity > 0 ? 'bg-stone-700' : 'bg-stone-300'}`}
+                      aria-label="Toggle shadow">
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${shadowIntensity > 0 ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </button>
+                    <span className="text-xs text-stone-500">Shadow</span>
+                    {shadowIntensity > 0 && (
+                      <span className="text-xs font-mono text-stone-400 ml-auto">{shadowIntensity}%</span>
+                    )}
+                  </div>
+                  {shadowIntensity > 0 && (
                     <input type="range" min={5} max={100} step={5} value={shadowIntensity}
                       onChange={e => setShadowIntensity(Number(e.target.value))}
-                      className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
-                    <span className="text-xs font-mono text-stone-400 w-8 text-right shrink-0">{shadowIntensity}%</span>
-                  </>
-                )}
+                      className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
+                  )}
+                </div>
               </div>
               <div className="flex flex-wrap gap-3 items-center">
                 <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
