@@ -10,8 +10,8 @@ class ProductSlideInput(BaseModel):
     dimensions: str  # preserve vendor's raw format — do NOT normalize
     description: str
     finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg
-    shadow_intensity: float = 0.65  # 0.0 = no shadow, 1.0 = max shadow
     prev_slide_id: str | None = None  # superseded candidate to delete after successful regen
+    keep_background: bool = False  # skips background removal if true
 
 
 class ProductInput(BaseModel):
@@ -28,5 +28,4 @@ class TwoProductSlideInput(BaseModel):
 
     product_a: ProductInput
     product_b: ProductInput
-    shadow_intensity: float = 0.65  # 0.0 = no shadow, 1.0 = max shadow
     prev_slide_id: str | None = None  # superseded candidate to delete after successful regen

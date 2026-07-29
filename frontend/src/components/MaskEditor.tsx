@@ -381,6 +381,9 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
     </button>
   )
 
+  const svgCursor = `<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="none" stroke="black" stroke-width="1"/><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 2}" fill="none" stroke="white" stroke-width="1"/></svg>`
+  const brushCursor = `url("data:image/svg+xml;utf8,${encodeURIComponent(svgCursor)}") ${brushSize/2} ${brushSize/2}, crosshair`
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
@@ -422,7 +425,7 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
           <canvas
             ref={dispRef}
             className={ready ? 'absolute top-0 left-0' : 'hidden'}
-            style={{ cursor: tool === 'pan' ? 'grab' : 'crosshair', touchAction: 'none' }}
+            style={{ cursor: tool === 'pan' ? 'grab' : brushCursor, touchAction: 'none' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}

@@ -17,17 +17,14 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
     if product.finalized_hero_url:
         hero_url = product.finalized_hero_url
     else:
-        try:
-            hero_url = await process_hero(product.hero_image_url, settings.gcs_bucket_name)
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
+        # Always use the original vendor URL directly — no re-encoding, no quality loss
+        # Background removal only happens when user manually triggers Edit cutout
+        hero_url = product.hero_image_url
 
     support_urls: list[str] = []
     for vendor_url in product.supporting_image_urls[:MAX_SUPPORTS]:
-        try:
-            support_urls.append(await process_supporting_image(vendor_url, settings.gcs_bucket_name))
-        except Exception as exc:
-            log.warning("Supporting image skipped (%s): %s", vendor_url, exc)
+        # Pass original vendor URLs directly to preserve quality
+        support_urls.append(vendor_url)
 
     product_ready = product.model_copy(update={
         "hero_image_url": hero_url,

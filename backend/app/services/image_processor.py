@@ -10,7 +10,7 @@ from rembg import remove
 
 from app.config import settings
 
-MAX_DIMENSION = 1500
+MAX_DIMENSION = 4000
 
 
 def _gcs_client() -> storage.Client:
@@ -56,8 +56,24 @@ async def process_hero(image_url: str, bucket_name: str) -> str:
     """Download, remove background, upload as PNG. Returns public GCS URL."""
     raw = _download(image_url)
     scaled = _downscale_png(raw)
+    
+    # rembg often degrades the RGB pixels slightly, so we only use it to get the alpha mask
     transparent = remove(scaled)
-    return _upload(transparent, bucket_name, prefix="hero", content_type="image/png", ext="png")
+    
+    orig_img = Image.open(io.BytesIO(scaled)).convert("RGBA")
+    rembg_img = Image.open(io.BytesIO(transparent)).convert("RGBA")
+    
+    if rembg_img.size != orig_img.size:
+        rembg_img = rembg_img.resize(orig_img.size, Image.LANCZOS)
+        
+    r, g, b, _ = orig_img.split()
+    mask_alpha = rembg_img.split()[3]
+    result = Image.merge("RGBA", (r, g, b, mask_alpha))
+    
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    
+    return _upload(buf.getvalue(), bucket_name, prefix="hero", content_type="image/png", ext="png")
 
 
 async def process_supporting_image(image_url: str, bucket_name: str) -> str:

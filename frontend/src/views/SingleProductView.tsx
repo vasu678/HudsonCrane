@@ -9,7 +9,6 @@ export default function SingleProductView() {
   const [deckUrl, setDeckUrl] = useState('')
   const [slideId, setSlideId] = useState('')
   const [thumbnailUrl, setThumbnailUrl] = useState('')
-  const [regenDisabled, setRegenDisabled] = useState(false)
 
   const [url, setUrl] = useState('')
   const [scraped, setScraped] = useState<ScrapeResult | null>(null)
@@ -19,7 +18,6 @@ export default function SingleProductView() {
   const [dimensions, setDimensions] = useState('')
   const [description, setDescription] = useState('')
   const [broken, setBroken] = useState<BrokenSet>(new Set())
-  const [shadowIntensity, setShadowIntensity] = useState(65)
   const [generatedHeroUrl, setGeneratedHeroUrl] = useState('')
 
   const [processingHero, setProcessingHero] = useState(false)
@@ -94,7 +92,8 @@ export default function SingleProductView() {
         body: JSON.stringify({
           hero_image_url: displayedImages[heroIndex],
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
-          name, dimensions, description, shadow_intensity: shadowIntensity / 100,
+          name, dimensions, description,
+          keep_background: true,
           ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
           ...(prevSlideId ? { prev_slide_id: prevSlideId } : {}),
         }),
@@ -110,12 +109,6 @@ export default function SingleProductView() {
     }
   }
 
-  async function handleRegenerate() {
-    setRegenDisabled(true)
-    await handleGenerate(slideId)
-    setRegenDisabled(false)
-  }
-
   function handleKeep() { setStep('done') }
 
   async function handleDiscard() {
@@ -124,7 +117,7 @@ export default function SingleProductView() {
         await fetch('/api/delete-slide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slide_id: slideId }) })
       } catch { /* non-fatal */ }
     }
-    handleReset()
+    setStep('review')
   }
 
   async function handleEditCutout() {
@@ -155,7 +148,7 @@ export default function SingleProductView() {
 
   function handleReset() {
     setStep('input'); setUrl(''); setScraped(null); setDeckUrl(''); setError('')
-    setSlideId(''); setThumbnailUrl(''); setRegenDisabled(false); setGeneratedHeroUrl('')
+    setSlideId(''); setThumbnailUrl(''); setGeneratedHeroUrl('')
     setBroken(new Set()); setSupportingIndices([])
     setProcessedHeroUrl(''); setEditingHero(false); setProcessingHero(false)
     setFinalHeroUrl(''); setFinalizingHero(false)
@@ -204,7 +197,7 @@ export default function SingleProductView() {
                       isHero ? 'border-stone-800 ring-2 ring-stone-300'
                       : isSupporting ? 'border-emerald-500 ring-2 ring-emerald-200'
                       : 'border-stone-200 hover:border-stone-400'}`}>
-                    <img src={img} alt={`Product image ${i + 1}`} className="w-full h-full object-cover"
+                    <img src={img} alt={`Product image ${i + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-contain"
                       onError={() => {
                         setBroken(prev => new Set(prev).add(img))
                         if (heroIndex === i) setHeroIndex(0)
@@ -235,11 +228,10 @@ export default function SingleProductView() {
 
           <div className="flex items-center justify-between py-1">
             <p className="text-xs text-stone-400">
-              Background removal runs on the hero.{' '}
               {finalHeroUrl ? <span className="text-emerald-600 font-medium">Custom cutout applied.</span>
               : finalizingHero ? <span className="text-stone-500">Uploading edited cutout…</span>
               : processedHeroUrl ? <span className="text-stone-500">Cutout ready — edit or generate.</span>
-              : 'Optionally inspect and touch up the cutout before generating.'}
+              : 'Optionally edit the cutout before generating.'}
             </p>
             <button onClick={handleEditCutout} disabled={processingHero || finalizingHero || step !== 'review'}
               className="shrink-0 ml-4 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 rounded-lg hover:border-stone-600 hover:text-stone-800 disabled:opacity-40 transition-colors">
@@ -275,6 +267,7 @@ export default function SingleProductView() {
           <div className="relative rounded-lg overflow-hidden border border-stone-200 shadow-sm bg-stone-100 min-h-[160px]">
             {thumbnailUrl && (
               <img src={thumbnailUrl} alt="Slide preview"
+                referrerPolicy="no-referrer"
                 className={`w-full transition-opacity duration-300 ${step === 'generating' ? 'opacity-25' : 'opacity-100'}`} />
             )}
             {step === 'generating' && (
@@ -288,58 +281,24 @@ export default function SingleProductView() {
           {step === 'preview' && (
             <>
               <p className="text-xs text-stone-400">This is the actual slide — every element is individually editable in Google Slides.</p>
-              <div className="flex items-center gap-4 py-1">
-                {generatedHeroUrl && (
-                  <div className="w-28 h-28 shrink-0 rounded-lg bg-stone-100 flex items-center justify-center p-2">
-                    <img
-                      src={generatedHeroUrl}
-                      alt="Shadow preview"
-                      className="max-w-full max-h-full object-contain"
-                      style={{
-                        filter: shadowIntensity > 0
-                          ? `drop-shadow(${(shadowIntensity / 100) * 10}px ${(shadowIntensity / 100) * 10}px ${(shadowIntensity / 100) * 12}px rgba(0,0,0,${(shadowIntensity / 100) * 0.65}))`
-                          : 'none',
-                        transition: 'filter 0.1s ease',
-                      }}
-                    />
-                  </div>
-                )}
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setShadowIntensity(prev => prev > 0 ? 0 : 65)}
-                      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${shadowIntensity > 0 ? 'bg-stone-700' : 'bg-stone-300'}`}
-                      aria-label="Toggle shadow">
-                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${shadowIntensity > 0 ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </button>
-                    <span className="text-xs text-stone-500">Shadow</span>
-                    {shadowIntensity > 0 && (
-                      <span className="text-xs font-mono text-stone-400 ml-auto">{shadowIntensity}%</span>
-                    )}
-                  </div>
-                  {shadowIntensity > 0 && (
-                    <input type="range" min={5} max={100} step={5} value={shadowIntensity}
-                      onChange={e => setShadowIntensity(Number(e.target.value))}
-                      className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-stone-700 bg-stone-200" />
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-3 items-center">
+              <div className="flex flex-wrap gap-3 items-center mt-3">
                 <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
                   Keep — looks good ✓
-                </button>
-                <button onClick={handleRegenerate} disabled={regenDisabled}
-                  className="border border-stone-300 text-stone-700 text-sm font-medium px-5 py-2 rounded-lg hover:border-stone-600 hover:text-stone-900 disabled:opacity-40 transition-colors">
-                  Regenerate
                 </button>
                 <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-stone-500 hover:text-stone-700 underline">
                   Open in Google Slides →
                 </a>
               </div>
               {error && <p className="text-red-500 text-sm">{error}</p>}
-              <button onClick={handleDiscard} className="text-xs text-stone-400 hover:text-stone-600 underline block">
-                Start over (discards this slide)
-              </button>
+              <div className="flex items-center gap-4 pt-2">
+                <button onClick={handleDiscard} className="text-xs text-stone-500 hover:text-stone-800 underline">
+                  Discard slide &amp; pick new images
+                </button>
+                <span className="text-stone-300">|</span>
+                <button onClick={handleReset} className="text-xs text-stone-500 hover:text-stone-800 underline">
+                  Start new product
+                </button>
+              </div>
             </>
           )}
 
@@ -351,7 +310,7 @@ export default function SingleProductView() {
                 <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="inline-block bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
                   Open in Google Slides →
                 </a>
-                <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">Start over</button>
+                <button onClick={handleReset} className="text-sm text-stone-500 hover:text-stone-700 underline">Start new product</button>
               </div>
             </div>
           )}
