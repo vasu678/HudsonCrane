@@ -26,7 +26,12 @@ const BACKDROP_STYLE: Record<Backdrop, React.CSSProperties> = {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-const proxy = (url: string) => `/api/image-proxy?url=${encodeURIComponent(url)}`
+const proxy = (url: string) => {
+  if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('/')) {
+    return url
+  }
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -69,10 +74,9 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
   const initMask    = useRef<ImageData | null>(null)  // rembg snapshot for Reset
 
   // UI state (triggers re-render for controls only)
-  const [tool,      setTool]      = useState<Tool>('erase')
+  const [tool]            = useState<Tool>('erase')
   const [brushSize, setBrushSize] = useState(30)
-  const [blurSize,  setBlurSize]  = useState(0)
-  const [backdrop,  setBackdrop]  = useState<Backdrop>('check')
+  const backdrop: Backdrop = 'check'
   const [ready,     setReady]     = useState(false)
   const [loadErr,   setLoadErr]   = useState('')
   const [canUndo,   setCanUndo]   = useState(false)
@@ -227,9 +231,6 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
       const mod = e.metaKey || e.ctrlKey
       if (mod && e.key === 'z' && !e.shiftKey) { e.preventDefault(); doUndo() }
       if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); doRedo() }
-      if (e.key === 'e' && !mod) changeTool('erase')
-      if (e.key === 'r' && !mod) changeTool('restore')
-      if (e.key === 'h' && !mod) changeTool('pan')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -361,25 +362,9 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
   }
 
   // ── Tool / brush helpers ──────────────────────────────────────────────
-  function changeTool(t: Tool) { modeRef.current = t; setTool(t) }
   function changeBrush(v: number) { brushRef.current = v; setBrushSize(v) }
-  function changeBlur(v: number) { blurRef.current = v; setBlurSize(v) }
 
   // ── Render ────────────────────────────────────────────────────────────
-  const btnTool = (t: Tool, label: string, key: string) => (
-    <button
-      key={t}
-      onClick={() => changeTool(t)}
-      title={`${label} [${key.toUpperCase()}]`}
-      className={`text-xs px-3 py-1.5 rounded-md border transition-colors select-none ${
-        tool === t
-          ? 'bg-stone-800 text-white border-stone-800'
-          : 'border-stone-300 text-stone-600 hover:border-stone-600 hover:text-stone-800'
-      }`}
-    >
-      {label}
-    </button>
-  )
 
   const svgCursor = `<svg xmlns="http://www.w3.org/2000/svg" width="${brushSize}" height="${brushSize}"><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 1}" fill="none" stroke="black" stroke-width="1"/><circle cx="${brushSize/2}" cy="${brushSize/2}" r="${brushSize/2 - 2}" fill="none" stroke="white" stroke-width="1"/></svg>`
   const brushCursor = `url("data:image/svg+xml;utf8,${encodeURIComponent(svgCursor)}") ${brushSize/2} ${brushSize/2}, crosshair`
@@ -439,64 +424,37 @@ export default function MaskEditor({ originalUrl, rembgUrl, onApply, onCancel }:
         <canvas ref={offRef}  className="hidden" />
 
         {/* Toolbar */}
-        <div className="shrink-0 px-5 py-3 border-t border-stone-200 flex items-center gap-2 flex-wrap">
-          {/* Tools */}
-          {btnTool('erase',   'Erase',   'e')}
-          {btnTool('restore', 'Restore', 'r')}
-          {btnTool('pan',     'Pan',     'h')}
+        <div className="shrink-0 px-5 py-3 border-t border-stone-200 flex items-center gap-4 flex-wrap">
+          {/* Active Tool Indicator */}
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-md bg-stone-800 text-white select-none">
+            ✏️ Erase
+          </span>
 
           {/* Brush size */}
-          <div className="flex items-center gap-1.5 ml-1">
-            <span className="text-xs text-stone-400">Size</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-stone-500 font-medium">Eraser Size:</span>
             <input
               type="range" min={4} max={120} value={brushSize}
               onChange={e => changeBrush(Number(e.target.value))}
-              className="w-20 accent-stone-700"
+              className="w-32 accent-stone-700"
             />
-            <span className="text-xs text-stone-500 w-6 tabular-nums">{brushSize}</span>
+            <span className="text-xs font-semibold text-stone-700 w-8 tabular-nums">{brushSize}px</span>
           </div>
 
-          {/* Blur */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-stone-400">Blur</span>
-            <input
-              type="range" min={0} max={100} value={blurSize}
-              onChange={e => changeBlur(Number(e.target.value))}
-              className="w-20 accent-stone-700"
-            />
-            <span className="text-xs text-stone-500 w-6 tabular-nums">{blurSize}</span>
-          </div>
-
-          <div className="w-px h-4 bg-stone-200 mx-1 shrink-0" />
-
-          {/* Backdrop */}
-          <span className="text-xs text-stone-400">BG:</span>
-          {(['check', 'white', 'dark'] as Backdrop[]).map(b => (
-            <button
-              key={b}
-              onClick={() => setBackdrop(b)}
-              className={`text-xs px-2 py-1 rounded-md border transition-colors ${
-                backdrop === b ? 'bg-stone-800 text-white border-stone-800' : 'border-stone-300 text-stone-500 hover:border-stone-500'
-              }`}
-            >
-              {b === 'check' ? '⊡' : b === 'white' ? '☐' : '■'}
-            </button>
-          ))}
-
-          <div className="w-px h-4 bg-stone-200 mx-1 shrink-0" />
+          <div className="w-px h-5 bg-stone-200 mx-1 shrink-0" />
 
           {/* Undo / Redo / Reset */}
-          <button onClick={doUndo} disabled={!canUndo} className="text-xs text-stone-500 hover:text-stone-800 disabled:opacity-30 px-1" title="Undo ⌘Z">↩ Undo</button>
-          <button onClick={doRedo} disabled={!canRedo} className="text-xs text-stone-500 hover:text-stone-800 disabled:opacity-30 px-1" title="Redo ⌘Y">↪ Redo</button>
-          <button onClick={doReset} className="text-xs text-stone-400 hover:text-red-600 px-1" title="Reset to rembg output">Reset</button>
+          <button onClick={doUndo} disabled={!canUndo} className="text-xs font-medium text-stone-600 hover:text-stone-900 disabled:opacity-30 px-2.5 py-1.5 rounded hover:bg-stone-100 transition-colors" title="Undo ⌘Z">↩ Undo</button>
+          <button onClick={doRedo} disabled={!canRedo} className="text-xs font-medium text-stone-600 hover:text-stone-900 disabled:opacity-30 px-2.5 py-1.5 rounded hover:bg-stone-100 transition-colors" title="Redo ⌘Y">↪ Redo</button>
+          <button onClick={doReset} className="text-xs font-medium text-stone-500 hover:text-red-600 px-2.5 py-1.5 rounded hover:bg-red-50 transition-colors" title="Reset to initial cutout">Reset</button>
 
           <span className="flex-1" />
 
-          <button onClick={onCancel} className="text-sm text-stone-400 hover:text-stone-700 px-2">Cancel</button>
+          <button onClick={onCancel} className="text-sm font-medium text-stone-500 hover:text-stone-800 px-3 py-1.5 rounded-lg hover:bg-stone-100 transition-colors">Cancel</button>
           <button
             disabled={!ready}
-            onClick={() => onApply(maskRef.current!.toDataURL('image/png'))}
-            className="bg-stone-800 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors"
+            onClick={() => onApply(offRef.current!.toDataURL('image/png'))}
+            className="bg-stone-800 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors shadow-sm"
           >
             Apply
           </button>

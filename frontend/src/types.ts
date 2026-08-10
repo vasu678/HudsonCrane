@@ -1,5 +1,5 @@
 export type Step = 'input' | 'review' | 'generating' | 'preview' | 'done'
-export type Mode = 'single' | 'two'
+export type Mode = 'single' | 'two' | 'cutout'
 export type BrokenSet = Set<string>
 
 export interface ScrapeResult {

@@ -1,17 +1,38 @@
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.config import settings
 from app.models.requests import (
-    FinalizeHeroRequest,
-    FinalizeHeroResponse,
     ProcessHeroResponse,
     ScrapeRequest,
 )
-from app.services.image_processor import finalize_hero, process_hero
+from app.services.image_processor import process_hero, process_image_bytes, upload_raw_png
 
 router = APIRouter()
+
+
+@router.post("/api/upload-cutout")
+async def upload_cutout_endpoint(file: UploadFile = File(...)) -> dict:
+    """Upload a raw image file, run rembg, and return transparent GCS URL."""
+    try:
+        data = await file.read()
+        orig_url, cutout_url = await process_image_bytes(data, settings.gcs_bucket_name)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Cutout upload failed: {e}")
+    return {"original_url": orig_url, "cutout_url": cutout_url}
+
+
+@router.post("/api/save-edited-cutout")
+async def save_edited_cutout_endpoint(file: UploadFile = File(...)) -> dict:
+    """Save an edited cutout PNG directly to GCS without running rembg."""
+    try:
+        data = await file.read()
+        cutout_url = await upload_raw_png(data, settings.gcs_bucket_name)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Edited cutout upload failed: {e}")
+    return {"cutout_url": cutout_url}
+
 
 BROWSER_UA = "Mozilla/5.0"
 
@@ -24,16 +45,6 @@ async def process_hero_endpoint(req: ScrapeRequest) -> ProcessHeroResponse:
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Background removal failed: {e}")
     return ProcessHeroResponse(hero_url=hero_url)
-
-
-@router.post("/api/finalize-hero", response_model=FinalizeHeroResponse)
-async def finalize_hero_endpoint(req: FinalizeHeroRequest) -> FinalizeHeroResponse:
-    """Composite the original vendor image with the browser-edited mask and upload to GCS."""
-    try:
-        hero_url = await finalize_hero(req.original_url, req.mask_data_url, settings.gcs_bucket_name)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Mask finalization failed: {e}")
-    return FinalizeHeroResponse(hero_url=hero_url)
 
 
 @router.get("/api/image-proxy")

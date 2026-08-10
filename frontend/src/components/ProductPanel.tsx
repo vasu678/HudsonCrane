@@ -16,7 +16,7 @@ interface ProductPanelProps {
 }
 
 export default function ProductPanel({
-  label, heroIdx, setHeroIdx, brokenSet, setBrokenSet, displayedImgs,
+  label, heroIdx, setHeroIdx, brokenSet: _brokenSet, setBrokenSet, displayedImgs,
   nameVal, setNameVal, dimsVal, setDimsVal, descVal, setDescVal,
 }: ProductPanelProps) {
   return (

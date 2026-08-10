@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -5,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from app.config import settings
 from app.models.requests import DeleteSlideRequest, GenerateResponse
 from app.models.slide import ProductSlideInput, TwoProductSlideInput
-from app.services.image_processor import process_hero, process_supporting_image
+from app.services.image_processor import process_hero, process_raw_hero, process_supporting_image
 from app.services.slide_generator import MAX_SUPPORTS, delete_slide_by_id, generate_slide, generate_two_slide
 
 log = logging.getLogger(__name__)
@@ -17,14 +18,16 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
     if product.finalized_hero_url:
         hero_url = product.finalized_hero_url
     else:
-        # Always use the original vendor URL directly — no re-encoding, no quality loss
-        # Background removal only happens when user manually triggers Edit cutout
+        # Default to sending the raw URL directly to Google Slides for maximum speed.
+        # We will only downscale if Google API rejects it for being >25 Megapixels.
         hero_url = product.hero_image_url
 
     support_urls: list[str] = []
-    for vendor_url in product.supporting_image_urls[:MAX_SUPPORTS]:
-        # Pass original vendor URLs directly to preserve quality
-        support_urls.append(vendor_url)
+    if product.supporting_image_urls:
+        support_urls = await asyncio.gather(*(
+            process_supporting_image(url, settings.gcs_bucket_name)
+            for url in product.supporting_image_urls[:MAX_SUPPORTS]
+        ))
 
     product_ready = product.model_copy(update={
         "hero_image_url": hero_url,
@@ -40,7 +43,25 @@ async def generate(product: ProductSlideInput) -> GenerateResponse:
             prev_slide_id=product.prev_slide_id,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Slide generation failed: {e}")
+        # If Google Slides rejects the image for being too large, downscale and retry!
+        if "too large" in str(e).lower() and not product.finalized_hero_url:
+            log.warning("Google Slides rejected the image for being >25 Megapixels. Downscaling and retrying...")
+            hero_url = await process_raw_hero(product.hero_image_url, settings.gcs_bucket_name)
+            product_ready = product_ready.model_copy(update={"hero_image_url": hero_url})
+            try:
+                result = generate_slide(
+                    product_ready,
+                    settings.template_presentation_id,
+                    settings.template_slide_id,
+                    settings.oauth_client_secrets_file,
+                    prev_slide_id=product.prev_slide_id,
+                )
+            except Exception as retry_e:
+                log.exception("Slide generation failed on retry: %s", retry_e)
+                raise HTTPException(status_code=500, detail=f"Slide generation failed: {retry_e}")
+        else:
+            log.exception("Slide generation failed: %s", e)
+            raise HTTPException(status_code=500, detail=f"Slide generation failed: {e}")
 
     return GenerateResponse(
         deck_url=result.deck_url,

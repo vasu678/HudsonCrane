@@ -12,6 +12,8 @@ class ProductSlideInput(BaseModel):
     finalized_hero_url: str | None = None  # set when user applied mask editor; skips rembg
     prev_slide_id: str | None = None  # superseded candidate to delete after successful regen
     keep_background: bool = False  # skips background removal if true
+    layout: str = "right"  # "right" (default) | "left" (mirrored) | "bottom" (full-width horizontal)
+    hero_fit: str = "crop"  # "crop" (CENTER_CROP, fills space) | "inside" (CENTER_INSIDE, full image visible)
 
 
 class ProductInput(BaseModel):

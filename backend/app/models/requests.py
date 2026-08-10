@@ -23,14 +23,5 @@ class ProcessHeroResponse(BaseModel):
     hero_url: str
 
 
-class FinalizeHeroRequest(BaseModel):
-    original_url: str
-    mask_data_url: str  # PNG data URL from the browser mask canvas
-
-
-class FinalizeHeroResponse(BaseModel):
-    hero_url: str
-
-
 class DeleteSlideRequest(BaseModel):
     slide_id: str

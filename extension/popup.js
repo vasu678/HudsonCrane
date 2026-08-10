@@ -116,7 +116,16 @@ async function handleSend() {
       ? `${APP_URL}/?ext_data=${encodeURIComponent(encoded)}&mode=two`
       : `${APP_URL}/?ext_data=${encodeURIComponent(encoded)}`;
 
-    await chrome.tabs.create({ url: targetUrl });
+    const existingTabs = await chrome.tabs.query({ url: `${APP_URL}/*` });
+    if (existingTabs && existingTabs.length > 0) {
+      const tabId = existingTabs[0].id;
+      await chrome.tabs.update(tabId, { url: targetUrl, active: true });
+      if (existingTabs[0].windowId) {
+        await chrome.windows.update(existingTabs[0].windowId, { focused: true }).catch(() => {});
+      }
+    } else {
+      await chrome.tabs.create({ url: targetUrl });
+    }
 
     showStatus('success', `✅ Done! Extracted "${data.name}" with ${data.images.length} image(s).`);
     document.getElementById('btnText').textContent = 'Sent! ✓';
@@ -781,7 +790,35 @@ function extractProductData() {
       }
       images = unique;
 
-      const description = commonDescription();
+      let description = '';
+      
+      // Look for bullet points (Surya's main description format) anywhere on the page
+      // that isn't a navigation menu or footer list.
+      for (const ul of document.querySelectorAll('ul')) {
+        const cName = (ul.className || '').toLowerCase();
+        const cId = (ul.id || '').toLowerCase();
+        if (ul.textContent.length > 20 && 
+            !cName.includes('nav') && !cName.includes('menu') && !cName.includes('tab') &&
+            !cId.includes('nav') && !cId.includes('menu') && !cId.includes('footer')) {
+            
+          const lis = Array.from(ul.querySelectorAll('li'));
+          // Only process lists that aren't mostly links
+          const links = ul.querySelectorAll('a');
+          if (links.length < lis.length / 2) {
+            const textBullets = lis.map(li => '- ' + li.textContent.replace(/\s+/g, ' ').trim()).filter(t => t.length > 5);
+            if (textBullets.length > 0 && textBullets.length < 15) {
+              description = textBullets.join('\n');
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!description) {
+        description = commonDescription();
+      }
+      description = (description || '').substring(0, 300);
+
       const dimensions = suryaDimensions();
 
       return { name, dimensions, description, images: images.slice(0, 12), source_url: window.location.href };

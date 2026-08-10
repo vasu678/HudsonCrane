@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import MaskEditor from '../components/MaskEditor'
 import type { BrokenSet, ScrapeResult, Step } from '../types'
 
 export default function SingleProductView() {
@@ -18,13 +17,10 @@ export default function SingleProductView() {
   const [dimensions, setDimensions] = useState('')
   const [description, setDescription] = useState('')
   const [broken, setBroken] = useState<BrokenSet>(new Set())
-  const [generatedHeroUrl, setGeneratedHeroUrl] = useState('')
-
-  const [processingHero, setProcessingHero] = useState(false)
-  const [processedHeroUrl, setProcessedHeroUrl] = useState('')
-  const [editingHero, setEditingHero] = useState(false)
-  const [finalizingHero, setFinalizingHero] = useState(false)
   const [finalHeroUrl, setFinalHeroUrl] = useState('')
+  const [layout, setLayout] = useState<'right' | 'left' | 'bottom'>('right')
+  const [heroFit, setHeroFit] = useState<'crop' | 'inside'>('crop')
+  const [previewModalImg, setPreviewModalImg] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -38,7 +34,7 @@ export default function SingleProductView() {
       setDescription(decoded.description || '')
       if (decoded.source_url) setUrl(decoded.source_url)
       setHeroIndex(0); setSupportingIndices([]); setBroken(new Set())
-      setProcessedHeroUrl(''); setFinalHeroUrl(''); setEditingHero(false); setFinalizingHero(false)
+      setFinalHeroUrl('')
       setStep('review')
       window.history.replaceState({}, '', window.location.pathname)
     } catch {
@@ -47,14 +43,14 @@ export default function SingleProductView() {
   }, [])
 
   const displayedImages = scraped
-    ? scraped.images.slice(0, 12).filter(img => !broken.has(img)).slice(0, 8)
+    ? scraped.images.slice(0, 30).filter(img => !broken.has(img))
     : []
 
-  const MAX_SUPPORTS = 5
+  const MAX_SUPPORTS = 2
 
   function setHero(i: number) {
     setSupportingIndices(prev => prev.filter(idx => idx !== i))
-    setHeroIndex(i); setProcessedHeroUrl(''); setFinalHeroUrl('')
+    setHeroIndex(i); setFinalHeroUrl('')
   }
 
   function toggleSupporting(i: number, e: React.MouseEvent) {
@@ -75,16 +71,17 @@ export default function SingleProductView() {
       const data: ScrapeResult = await res.json()
       setScraped(data); setName(data.name); setDimensions(data.dimensions); setDescription(data.description)
       setHeroIndex(0); setSupportingIndices([]); setBroken(new Set())
-      setProcessedHeroUrl(''); setFinalHeroUrl(''); setEditingHero(false); setFinalizingHero(false)
+      setFinalHeroUrl('')
       setStep('review')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setLoading(false) }
   }
 
-  async function handleGenerate(prevSlideId?: string) {
+  async function handleGenerate(prevSlideId?: string, heroFitOverride?: 'crop' | 'inside') {
     if (!scraped) return
     setStep('generating'); setError('')
+    const fitToUse = heroFitOverride ?? heroFit
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -92,7 +89,8 @@ export default function SingleProductView() {
         body: JSON.stringify({
           hero_image_url: displayedImages[heroIndex],
           supporting_image_urls: supportingIndices.map(i => displayedImages[i]),
-          name, dimensions, description,
+          name, dimensions, description, layout,
+          hero_fit: fitToUse,
           keep_background: true,
           ...(finalHeroUrl ? { finalized_hero_url: finalHeroUrl } : {}),
           ...(prevSlideId ? { prev_slide_id: prevSlideId } : {}),
@@ -101,7 +99,6 @@ export default function SingleProductView() {
       if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Generate failed') }
       const data = await res.json()
       setDeckUrl(data.deck_url); setSlideId(data.slide_id || ''); setThumbnailUrl(data.thumbnail_url || '')
-      if (data.hero_url) setGeneratedHeroUrl(data.hero_url)
       setStep('preview')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
@@ -120,38 +117,11 @@ export default function SingleProductView() {
     setStep('review')
   }
 
-  async function handleEditCutout() {
-    const vendorUrl = displayedImages[heroIndex]
-    if (!vendorUrl) return
-    setProcessingHero(true); setError('')
-    try {
-      const res = await fetch('/api/process-hero', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: vendorUrl }) })
-      if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Processing failed') }
-      const { hero_url } = await res.json()
-      setProcessedHeroUrl(hero_url); setEditingHero(true)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally { setProcessingHero(false) }
-  }
-
-  async function handleMaskApply(maskDataUrl: string) {
-    setEditingHero(false); setFinalizingHero(true); setError('')
-    try {
-      const res = await fetch('/api/finalize-hero', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ original_url: displayedImages[heroIndex], mask_data_url: maskDataUrl }) })
-      if (!res.ok) { const b = await res.json(); throw new Error(b.detail || 'Finalize failed') }
-      const { hero_url } = await res.json()
-      setFinalHeroUrl(hero_url)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally { setFinalizingHero(false) }
-  }
-
   function handleReset() {
     setStep('input'); setUrl(''); setScraped(null); setDeckUrl(''); setError('')
-    setSlideId(''); setThumbnailUrl(''); setGeneratedHeroUrl('')
+    setSlideId(''); setThumbnailUrl('')
     setBroken(new Set()); setSupportingIndices([])
-    setProcessedHeroUrl(''); setEditingHero(false); setProcessingHero(false)
-    setFinalHeroUrl(''); setFinalizingHero(false)
+    setFinalHeroUrl('')
   }
 
   const showReview = scraped && (step === 'review' || (step === 'generating' && !thumbnailUrl))
@@ -159,6 +129,29 @@ export default function SingleProductView() {
 
   return (
     <>
+      {previewModalImg && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setPreviewModalImg(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-xl p-3 shadow-2xl overflow-hidden flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewModalImg(null)}
+              className="absolute top-3 right-3 bg-stone-800 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm hover:bg-stone-700"
+            >
+              ✕
+            </button>
+            <img
+              src={previewModalImg}
+              alt="Full size preview"
+              referrerPolicy="no-referrer"
+              className="max-h-[82vh] w-auto object-contain rounded-lg"
+            />
+            <p className="text-xs text-stone-500 mt-2">Click anywhere or ✕ to close</p>
+          </div>
+        </div>
+      )}
+
       <section className="bg-white rounded-xl border border-stone-200 p-6 space-y-4">
         <h2 className="font-medium text-stone-700">1. Paste a vendor product URL</h2>
         <div className="flex gap-3">
@@ -182,8 +175,7 @@ export default function SingleProductView() {
           <h2 className="font-medium text-stone-700">2. Select images &amp; review text</h2>
           <div>
             <p className="text-xs text-stone-500 mb-3">
-              Click an image to set it as the <strong>hero</strong> (background removed).
-              Use <strong>+</strong> to add up to {MAX_SUPPORTS} <span className="text-emerald-700 font-medium">supporting</span> images (kept as-is).
+              Click an image to set it as the <strong>hero</strong>. Use <strong>+</strong> to add <span className="text-emerald-700 font-medium">supporting</span> images.
             </p>
             <div className="grid grid-cols-4 gap-3">
               {displayedImages.map((img, i) => {
@@ -192,12 +184,12 @@ export default function SingleProductView() {
                 const isSupporting = supportRank !== -1
                 const canAdd = !isHero && !isSupporting && supportingIndices.length < MAX_SUPPORTS
                 return (
-                  <button key={img} onClick={() => setHero(i)}
-                    className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-square ${
+                  <button key={img} onClick={() => setHero(i)} onDoubleClick={() => setPreviewModalImg(img)}
+                    className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-square bg-stone-50 ${
                       isHero ? 'border-stone-800 ring-2 ring-stone-300'
                       : isSupporting ? 'border-emerald-500 ring-2 ring-emerald-200'
                       : 'border-stone-200 hover:border-stone-400'}`}>
-                    <img src={img} alt={`Product image ${i + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-contain"
+                    <img src={img} alt={`Product image ${i + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-contain p-1"
                       onError={() => {
                         setBroken(prev => new Set(prev).add(img))
                         if (heroIndex === i) setHeroIndex(0)
@@ -221,22 +213,8 @@ export default function SingleProductView() {
             {supportingIndices.length > 0 && (
               <p className="text-xs text-emerald-700 mt-2">
                 {supportingIndices.length} supporting image{supportingIndices.length > 1 ? 's' : ''} selected
-                {supportingIndices.length < MAX_SUPPORTS && ` (you can add up to ${MAX_SUPPORTS - supportingIndices.length} more)`}
               </p>
             )}
-          </div>
-
-          <div className="flex items-center justify-between py-1">
-            <p className="text-xs text-stone-400">
-              {finalHeroUrl ? <span className="text-emerald-600 font-medium">Custom cutout applied.</span>
-              : finalizingHero ? <span className="text-stone-500">Uploading edited cutout…</span>
-              : processedHeroUrl ? <span className="text-stone-500">Cutout ready — edit or generate.</span>
-              : 'Optionally edit the cutout before generating.'}
-            </p>
-            <button onClick={handleEditCutout} disabled={processingHero || finalizingHero || step !== 'review'}
-              className="shrink-0 ml-4 text-xs border border-stone-300 text-stone-600 px-3 py-1.5 rounded-lg hover:border-stone-600 hover:text-stone-800 disabled:opacity-40 transition-colors">
-              {processingHero ? 'Processing…' : finalizingHero ? 'Uploading…' : (processedHeroUrl || finalHeroUrl) ? 'Re-edit cutout' : 'Edit cutout'}
-            </button>
           </div>
 
           <div className="space-y-4">
@@ -252,11 +230,35 @@ export default function SingleProductView() {
               <label className="block text-xs font-medium text-stone-500 mb-1">Description</label>
               <textarea rows={4} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400 resize-none" value={description} onChange={e => setDescription(e.target.value)} />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-500 mb-2">Slide Layout</label>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { id: 'right', label: 'Hero Image Right', desc: 'Hero on Right, Text + Supporting Images on Left' },
+                  { id: 'left', label: 'Hero Image Left', desc: 'Hero on Left, Text + Supporting Images on Right' },
+                  { id: 'bottom', label: 'Full Horizontal', desc: 'Wide Bottom Hero (For Sofas/Tables)' },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setLayout(opt.id as any)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      layout === opt.id
+                        ? 'border-stone-800 bg-stone-50 ring-2 ring-stone-300'
+                        : 'border-stone-200 hover:border-stone-400 bg-white'
+                    }`}
+                  >
+                    <div className="font-medium text-sm text-stone-800">{opt.label}</div>
+                    <div className="text-xs text-stone-500 mt-0.5">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <button onClick={() => handleGenerate()} disabled={step === 'generating'}
             className="w-full bg-stone-800 text-white text-sm font-medium py-3 rounded-lg hover:bg-stone-700 disabled:opacity-40 transition-colors">
-            {step === 'generating' ? 'Generating preview… (background removal + slide creation, ~30s)' : 'Generate Slide'}
+            {step === 'generating' ? 'Generating preview… (slide creation, ~15s)' : 'Generate Slide'}
           </button>
         </section>
       )}
@@ -285,6 +287,25 @@ export default function SingleProductView() {
                 <button onClick={handleKeep} className="bg-emerald-700 text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-emerald-600 transition-colors">
                   Keep — looks good ✓
                 </button>
+                {/* Hero Fit Toggle */}
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-xs text-stone-500">Hero image:</span>
+                  <button
+                    onClick={() => {
+                      const newFit = heroFit === 'crop' ? 'inside' : 'crop'
+                      setHeroFit(newFit)
+                      handleGenerate(slideId, newFit)
+                    }}
+                    title={heroFit === 'crop' ? 'Fill mode: zooms in to cover full space (may crop). Click to switch to Fit.' : 'Fit mode: shows full image (may have white gaps). Click to switch to Fill.'}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${
+                      heroFit === 'crop'
+                        ? 'bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200'
+                        : 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100'
+                    }`}
+                  >
+                    {heroFit === 'crop' ? '✂️ Switch to Fit (full image)' : '🔲 Switch to Fill (cover space)'}
+                  </button>
+                </div>
                 <a href={deckUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-stone-500 hover:text-stone-700 underline">
                   Open in Google Slides →
                 </a>
@@ -315,10 +336,6 @@ export default function SingleProductView() {
             </div>
           )}
         </section>
-      )}
-
-      {editingHero && processedHeroUrl && (
-        <MaskEditor originalUrl={displayedImages[heroIndex]} rembgUrl={processedHeroUrl} onApply={handleMaskApply} onCancel={() => setEditingHero(false)} />
       )}
     </>
   )

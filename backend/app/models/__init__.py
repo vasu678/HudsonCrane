@@ -4,8 +4,6 @@ from app.models.requests import (
     ScrapeResponse,
     GenerateResponse,
     ProcessHeroResponse,
-    FinalizeHeroRequest,
-    FinalizeHeroResponse,
 )
 
 __all__ = [
@@ -16,6 +14,4 @@ __all__ = [
     "ScrapeResponse",
     "GenerateResponse",
     "ProcessHeroResponse",
-    "FinalizeHeroRequest",
-    "FinalizeHeroResponse",
 ]

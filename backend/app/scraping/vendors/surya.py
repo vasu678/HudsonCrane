@@ -187,6 +187,28 @@ async def _playwright_fallback(url: str) -> ScrapeResult:
             name = await page.title()
             name = name.split("|")[0].strip()
 
+        # Fallback: get description from bullet points if JSON-LD missed it (Surya often uses bullet points)
+        if not description:
+            desc_bullets = await page.evaluate("""() => {
+                const h1 = document.querySelector('h1, h2.product-name');
+                if (!h1) return '';
+                let parent = h1.parentElement;
+                while (parent && parent.tagName !== 'BODY') {
+                    const uls = parent.querySelectorAll('ul');
+                    for (const ul of uls) {
+                        const className = (ul.className || '').toLowerCase();
+                        if (ul.textContent.length > 20 && !className.includes('nav') && !className.includes('menu') && !className.includes('tab')) {
+                            const lis = Array.from(ul.querySelectorAll('li')).map(li => '- ' + li.textContent.trim()).filter(t => t.length > 5);
+                            if (lis.length > 0) return lis.join('\\n');
+                        }
+                    }
+                    parent = parent.parentElement;
+                }
+                return '';
+            }""")
+            if desc_bullets:
+                description = desc_bullets[:300]
+
         # Get dimensions from spec section
         if not dimensions:
             dims = await page.evaluate("""() => {
