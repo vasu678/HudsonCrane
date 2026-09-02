@@ -189,7 +189,36 @@ async def process_raw_hero(image_url: str, bucket_name: str) -> str:
 
 
 async def process_supporting_image(image_url: str, bucket_name: str) -> str:
-    """Download, downscale, trim white edges (smartly), upload as JPEG. Returns public GCS URL."""
+    """Download, downscale, trim white edges (smartly).
+    If it has transparency (e.g. a cutout), preserve it as PNG.
+    Otherwise, upload as JPEG for smaller file sizes."""
     raw = _download(image_url)
-    jpeg = _downscale_jpeg(raw, trim=True)
-    return _upload(jpeg, bucket_name, prefix="support", content_type="image/jpeg", ext="jpg")
+    try:
+        img = Image.open(io.BytesIO(raw))
+    except Exception:
+        raise ValueError("Could not read image format.")
+    
+    # Check if the image has actual transparency
+    is_transparent = False
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        img_rgba = img.convert("RGBA")
+        extrema = img_rgba.getextrema()
+        if extrema[3][0] < 255:  # alpha channel min value < 255
+            is_transparent = True
+            
+    if is_transparent:
+        # Trim transparent edges tightly so the cutout scales up properly in Google Slides
+        img_rgba = img.convert("RGBA")
+        bbox = img_rgba.split()[3].getbbox()
+        if bbox:
+            img = img.crop(bbox)
+            
+        if max(img.size) > MAX_DIMENSION:
+            img.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return _upload(buf.getvalue(), bucket_name, prefix="support", content_type="image/png", ext="png")
+    else:
+        # Process as a standard solid background image
+        jpeg = _downscale_jpeg(raw, trim=True)
+        return _upload(jpeg, bucket_name, prefix="support", content_type="image/jpeg", ext="jpg")

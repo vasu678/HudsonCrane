@@ -139,8 +139,15 @@ def _get_credentials(client_secrets_file: str) -> Credentials:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, SCOPES)
-            creds = flow.run_local_server(port=0)
+            try:
+                # This will only succeed on a local machine with a browser
+                flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, SCOPES)
+                creds = flow.run_local_server(port=0)
+            except Exception as e:
+                raise RuntimeError(
+                    "Google OAuth token is missing or expired, and the server cannot open a browser to authenticate. "
+                    "You MUST generate 'token.pickle' locally on your Mac by running the app, and then upload it to your server."
+                ) from e
         TOKEN_PATH.write_bytes(pickle.dumps(creds))
     return creds
 
@@ -451,9 +458,50 @@ def _get_sizes_by_ids(
 def delete_slide_by_id(presentation_id: str, slide_id: str, client_secrets_file: str) -> None:
     """Standalone delete — builds its own svc. Used by the /api/delete-slide endpoint."""
     creds = _get_credentials(client_secrets_file)
-    svc = build("slides", "v1", credentials=creds)
+    svc = build("slides", "v1", credentials=creds, cache_discovery=False)
     delete_slide(svc, presentation_id, slide_id)
 
+
+import httpx
+
+def _push_to_destination(svc, template_presentation_id: str, new_slide_id: str, dest_id: str) -> tuple[str, str, str] | None:
+    """Pushes a generated slide to the client's destination presentation via Apps Script Bridge."""
+    try:
+        payload = {
+            "secret": "hudsoncrane2026",
+            "sourcePresentationId": template_presentation_id,
+            "destinationPresentationId": dest_id,
+            "sourcePageId": new_slide_id,
+        }
+        with httpx.Client(follow_redirects=True) as client:
+            resp = client.post("https://script.google.com/macros/s/AKfycbxvuiXWBBvWKeQwjwaZnWqzamFPZlegnbqEDsQ6rpzmGSVWWZ4venZy6IIVP9_YNOGh3Q/exec", json=payload, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("success"):
+                dest_slide_id = data.get("newSlideId")
+                deck_url = f"https://docs.google.com/presentation/d/{dest_id}/edit"
+                
+                # Try to fetch thumbnail from the new destination presentation
+                try:
+                    thumbnail_url = _fetch_thumbnail(svc, dest_id, dest_slide_id)
+                except Exception as e:
+                    log.warning("Could not fetch thumbnail for destination presentation: %s", e)
+                    thumbnail_url = ""
+                
+                # Clean up the intermediate template slide since it has been safely copied
+                try:
+                    delete_slide(svc, template_presentation_id, new_slide_id)
+                except Exception as e:
+                    log.warning("Could not delete intermediate slide: %s", e)
+                
+                return deck_url, dest_slide_id, thumbnail_url
+            else:
+                log.error("Apps Script bridge failed: %s", data.get("error"))
+    except Exception as e:
+        log.error("Failed to copy slide to destination: %s", e)
+    
+    return None
 
 def generate_slide(
     product: ProductSlideInput,
@@ -464,7 +512,7 @@ def generate_slide(
 ) -> SlideResult:
     """Clone template slide, replace tokens + hero image. Returns SlideResult."""
     creds = _get_credentials(client_secrets_file)
-    svc = build("slides", "v1", credentials=creds)
+    svc = build("slides", "v1", credentials=creds, cache_discovery=False)
 
     dup = (
         svc.presentations()
@@ -581,6 +629,13 @@ def generate_slide(
     if prev_slide_id:
         delete_slide(svc, template_presentation_id, prev_slide_id)
     deck_url = f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+
+    dest_id = getattr(product, "destination_presentation_id", None)
+    if dest_id:
+        bridged = _push_to_destination(svc, template_presentation_id, new_slide_id, dest_id)
+        if bridged:
+            deck_url, new_slide_id, thumbnail_url = bridged
+
     return SlideResult(deck_url=deck_url, slide_id=new_slide_id, thumbnail_url=thumbnail_url)
 
 
@@ -593,7 +648,7 @@ def generate_two_slide(
 ) -> SlideResult:
     """Clone two-product template slide, replace tokens + both hero images. Returns SlideResult."""
     creds = _get_credentials(client_secrets_file)
-    svc = build("slides", "v1", credentials=creds)
+    svc = build("slides", "v1", credentials=creds, cache_discovery=False)
 
     dup = (
         svc.presentations()
@@ -632,4 +687,11 @@ def generate_two_slide(
     if prev_slide_id:
         delete_slide(svc, template_presentation_id, prev_slide_id)
     deck_url = f"https://docs.google.com/presentation/d/{template_presentation_id}/edit"
+
+    dest_id = getattr(two_product, "destination_presentation_id", None)
+    if dest_id:
+        bridged = _push_to_destination(svc, template_presentation_id, new_slide_id, dest_id)
+        if bridged:
+            deck_url, new_slide_id, thumbnail_url = bridged
+
     return SlideResult(deck_url=deck_url, slide_id=new_slide_id, thumbnail_url=thumbnail_url)

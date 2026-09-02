@@ -14,6 +14,7 @@ class ProductSlideInput(BaseModel):
     keep_background: bool = False  # skips background removal if true
     layout: str = "right"  # "right" (default) | "left" (mirrored) | "bottom" (full-width horizontal)
     hero_fit: str = "crop"  # "crop" (CENTER_CROP, fills space) | "inside" (CENTER_INSIDE, full image visible)
+    destination_presentation_id: str | None = None
 
 
 class ProductInput(BaseModel):
@@ -31,3 +32,4 @@ class TwoProductSlideInput(BaseModel):
     product_a: ProductInput
     product_b: ProductInput
     prev_slide_id: str | None = None  # superseded candidate to delete after successful regen
+    destination_presentation_id: str | None = None

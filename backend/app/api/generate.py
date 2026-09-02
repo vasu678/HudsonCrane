@@ -112,7 +112,7 @@ async def discard_slide(body: DeleteSlideRequest) -> dict:
     """Delete a candidate slide the user chose not to keep."""
     try:
         delete_slide_by_id(
-            settings.template_presentation_id,
+            body.presentation_id or settings.template_presentation_id,
             body.slide_id,
             settings.oauth_client_secrets_file,
         )

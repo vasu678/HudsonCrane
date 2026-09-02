@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
@@ -20,4 +20,7 @@ COPY app/ ./app/
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD bash -c "echo \"$GCS_KEY_BASE64\" | base64 -d > /app/gcs_key.json && \
+             echo \"$CLIENT_SECRETS_BASE64\" | base64 -d > /app/client_secrets.json && \
+             echo \"$TOKEN_PICKLE_BASE64\" | base64 -d > /app/token.pickle && \
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"

@@ -25,3 +25,4 @@ class ProcessHeroResponse(BaseModel):
 
 class DeleteSlideRequest(BaseModel):
     slide_id: str
+    presentation_id: str | None = None
